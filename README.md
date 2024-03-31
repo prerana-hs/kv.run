@@ -497,3 +497,6 @@ class Weight():
         return self.get_partial_sharded(tensor_name, dim)
 
 ```
+But "from text_generation_server.pb import generate_pb2_grpc, generate_pb2", pb folder has .gitignore file in it, and source file not uploaded.
+
+
