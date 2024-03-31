@@ -250,6 +250,7 @@ server is called by cli
 
 pb folder files are automated generaeted by gRPC, in the case of TGI, use
 ```bash
+<<<<<<< HEAD
 cd /torch-MIL/third_party/text-generation-inference/server
 make install
 ```
@@ -502,3 +503,11 @@ class Weight():
 
 >>>>>>> e789f01 (Update README.md)
 >>>>>>> 33bd22d (Update README.md)
+=======
+HF_HUB_ENABLE_HF_TRANSFER=1 pytest -s -vv --disable-pytest-warnings -m "punica_test" build/server/tests
+```
+
+# Single Device Multi-GPU Support
+
+## 
+>>>>>>> e789f01 (Update README.md)
