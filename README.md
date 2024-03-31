@@ -205,7 +205,6 @@ cd build/server & make install-eetq
 ## Model support matrix
 Note: L = Language, I = Image
 
-<<<<<<< HEAD
 | Model                                                                        | MOE  | Size  | Modality | Quantization | Tensor Parallelism | FlashInfer | Multi-LoRA |   
 |------------------------------------------------------------------------------|------|-------|----------|--------------|--------------------|------------|------------|
 | [Idefics](https://huggingface.co/HuggingFaceM4/idefics-9b)                   |     | 9B    | L, I ⇒ L |              |                    |            |            |
@@ -498,5 +497,3 @@ class Weight():
         return self.get_partial_sharded(tensor_name, dim)
 
 ```
-
->>>>>>> e789f01 (Update README.md)
