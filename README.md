@@ -82,6 +82,7 @@ cd build/server & make install-eetq
 ## Model support matrix
 Note: L = Language, I = Image
 
+<<<<<<< HEAD
 | Model                                                                        | MOE  | Size  | Modality | Quantization | Tensor Parallelism | FlashInfer | Multi-LoRA |   
 |------------------------------------------------------------------------------|------|-------|----------|--------------|--------------------|------------|------------|
 | [Idefics](https://huggingface.co/HuggingFaceM4/idefics-9b)                   |     | 9B    | L, I ⇒ L |              |                    |            |            |
@@ -110,3 +111,12 @@ Note: L = Language, I = Image
 | [Mpt](https://huggingface.co/mosaicml/mpt-7b-instruct)                       |     | 7B    | L ⇒ L    |              |                    |            |            |
 | [Gpt2](https://huggingface.co/openai-community/gpt2)                         |     | 124M  | L ⇒ L    |              |                    |            |            |
 | [Gpt Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)                   |     | 20B   | L ⇒ L    |              | ✔                  |            |            |
+=======
+```bash
+HF_HUB_ENABLE_HF_TRANSFER=1 pytest -s -vv --disable-pytest-warnings -m "punica_test" build/server/tests
+```
+
+# Single Device Multi-GPU Support
+
+## 
+>>>>>>> e789f01 (Update README.md)
