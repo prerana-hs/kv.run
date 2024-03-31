@@ -556,8 +556,7 @@ class Weight():
 
 ```
 
->>>>>>> e789f01 (Update README.md)
->>>>>>> 33bd22d (Update README.md)
+
 =======
 HF_HUB_ENABLE_HF_TRANSFER=1 pytest -s -vv --disable-pytest-warnings -m "punica_test" build/server/tests
 ```
@@ -565,7 +564,7 @@ HF_HUB_ENABLE_HF_TRANSFER=1 pytest -s -vv --disable-pytest-warnings -m "punica_t
 # Single Device Multi-GPU Support
 
 ## 
->>>>>>> e789f01 (Update README.md)
+
 ## tgi_server.server
 server is called by cli
 
@@ -580,7 +579,7 @@ pb folder files are automated generaeted by gRPC, in the case of TGI, use
 cd /torch-MIL/third_party/text-generation-inference/server
 make install
 '''
->>>>>>> 04b24b6 (Update README.md)
+
 
 =======
 
