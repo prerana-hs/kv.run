@@ -125,10 +125,10 @@ server is called by cli
 <img width="666" alt="截屏2024-03-31 03 51 29" src="https://github.com/nativ-ai/torch-MIL/assets/104136162/91463205-bf77-48df-9d12-71460a3986f1">
 
 pb folder files are automated generaeted by gRPC, in the case of TGI, use
-'''bash
+```bash
 cd /torch-MIL/third_party/text-generation-inference/server
 make install
-'''
+```
 
 
 >>>>>>> e789f01 (Update README.md)
