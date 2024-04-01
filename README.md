@@ -249,6 +249,7 @@ server is called by cli
 <img width="666" alt="截屏2024-03-31 03 51 29" src="https://github.com/nativ-ai/torch-MIL/assets/104136162/91463205-bf77-48df-9d12-71460a3986f1">
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 pb folder files are automated generaeted by gRPC, in the case of TGI, use
 ```bash
 <<<<<<< HEAD
@@ -520,5 +521,12 @@ server is called by cli
 =======
 >>>>>>> 8633d0c (Update README.md)
 But "from text_generation_server.pb import generate_pb2_grpc, generate_pb2", pb folder has .gitignore file in it, and source file not uploaded.
+=======
+pb folder files are automated generaeted by gRPC, in the case of TGI, use
+'''bash
+cd /torch-MIL/third_party/text-generation-inference/server
+make install
+'''
+>>>>>>> 04b24b6 (Update README.md)
 
 
