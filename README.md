@@ -523,7 +523,7 @@ server is called by cli
 But "from text_generation_server.pb import generate_pb2_grpc, generate_pb2", pb folder has .gitignore file in it, and source file not uploaded.
 =======
 pb folder files are automated generaeted by gRPC, in the case of TGI, use
-'''bash
+```bash
 cd /torch-MIL/third_party/text-generation-inference/server
 make install
 '''
