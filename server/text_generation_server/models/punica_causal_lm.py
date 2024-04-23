@@ -496,21 +496,18 @@ class PunicaLM(Model):
             next_token_id = reqctx.get_next_token_id(logits[i].unsqueeze(0))
             reqctx.append_token(next_token_id)
             text = reqctx.decode_tokens()
-            if reqctx.is_stop():
-                self._delete_request(reqid)
             generation = Generation(
-                reqid,
-                None,
+                reqid, None,
                 Tokens(
                     [next_token_id],
                     None,
                     [text],
                     [next_token_id in self.all_special_ids]
-                ),
-                None,
-                None,
+                ), None, None
             )
             generations.append(generation)
+            if reqctx.is_stop():
+                self._delete_request(reqid)
 
         forward_ns = start_decode - start
         decode_ns = time.time_ns() - start_decode

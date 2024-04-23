@@ -42,8 +42,7 @@ class MultiLora:
         self.rid = 0
 
         # Create text generation requests
-        self.reqctx = []
-        self.reqname = {}
+        self.reqname, self.reqtext = {}, {}
         for model_name in lora_specs:
             for lora_or_base in ["lora", "base"]:
                 self._create_request(model_name, lora_or_base)
@@ -52,7 +51,7 @@ class MultiLora:
         if lora_or_base == "lora":
             prompts = self.lora_specs[model_name].lora_prompts
             lora_id = model_name
-        elif lora_or_base == "base":
+        elif lora_or_base == "base" or lora_or_base == "empty":
             prompts = self.lora_specs[model_name].base_prompts
             lora_id = "empty"
         else:
@@ -73,21 +72,16 @@ class MultiLora:
                 repetition_penalty=1.1,
             ),
             stopping_parameters=generate_pb2.StoppingCriteriaParameters(
-                max_new_tokens=256,
+                max_new_tokens=2048,
                 stop_sequences=[],
                 ignore_eos_token=True))
         self.rid += 1
-        self.reqctx.append(request) #{"request": request, "is_prefill": False}
+        batch = generate_pb2.Batch(id = 0, requests = [request], size = 1)
+        pb_batch = PunicaBatch.from_pb(batch, self.tokenizer, torch.float16, torch.device("cuda"))
+        self.model.add_request(pb_batch)
         self.reqname[request.id] = f'{model_name}-{lora_or_base}'
-
-    def _delete_request(
-        self,
-        model_name: str,
-        lora_or_base: str,
-    ):
-        reqctx = self.reqctx[(model_name, lora_or_base)]
-        #reqctx.kvcache.release()
-        del self.reqctx[(model_name, lora_or_base)]
+        self.reqtext[request.id] = prompt
+        return request.id
 
     def stop(self):
         self.stop_signal.set()
@@ -96,30 +90,23 @@ class MultiLora:
         self,
         append_box: Callable[[str, str], None],
     ):
-        running_batch = None
         time.sleep(0.1)
-        for req in self.reqctx:
-            append_box(self.reqname[req.id], req.inputs)
+        #for id in self.reqname:
+        #    append_box(self.reqname[id], self.reqtext[id])
 
         while not self.stop_signal.is_set():
-            # Sort by id.
-            if self.reqctx:
-                reqs = sorted(
-                    self.reqctx,
-                    key=lambda req: req.lora_id,
-                )
-                new_batch = generate_pb2.Batch(id=int(time.time()), requests=reqs, size=len(reqs))
-                new_batch = PunicaBatch.from_pb(new_batch, self.tokenizer, torch.float32, torch.device("cuda"))
-                if running_batch:
-                    running_batch = PunicaBatch.concatenate([running_batch, new_batch])
-                else:
-                    running_batch = new_batch
-                self.reqctx = []
+            generations, _, timing = self.model.generate_token(PunicaBatch.from_pb(generate_pb2.Batch()))
+            for gen in generations:
+                append_box(self.reqname[gen.request_id], gen.tokens.texts[0])
+            now = [gen.request_id for gen in generations]
+            for id in list(self.reqname):
+                if id not in now:
+                    append_box(self.reqname[id], "\n------\n\n")
+                    model_name, lora_or_base = self.reqname[id].split('-')[0], self.reqname[id].split('-')[1]
+                    nid = self._create_request(model_name, lora_or_base)
+                    append_box(self.reqname[nid], self.reqtext[nid])
+                    del self.reqname[id], self.reqtext[id]
 
-            if running_batch:
-                generations, running_batch, timing = self.model.generate_token(running_batch)
-                for gen in generations:
-                    append_box(self.reqname[gen.request_id], gen.tokens.texts[0])
 
 class TailLog(Label):
     def __init__(self, **kwargs):
