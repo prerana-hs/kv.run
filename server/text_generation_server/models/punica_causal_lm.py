@@ -1,20 +1,20 @@
 # Modified from https://github.com/punica-ai/punica/blob/master/src/punica/models/llama_lora.py
 # Editor: Junyi Shen
 
-import math
 import torch
+from typing import Any, TypedDict, cast
 from transformers.models.llama.modeling_llama import LlamaConfig
-from text_generation_server.utils.punica_utils import BatchedKvCache, BatchedLoraWeight, BatchLenInfo, LoraWeight, KvPool, KvCache, convert_lora_weight
+from text_generation_server.utils.punica_utils import BatchedKvCache, BatchLenInfo, KvPool, KvCache
 from .custom_modeling.punica_llama_lora import LlamaForCausalLM, LlamaLoraWeight, BatchedLlamaLoraWeight
-import peft
+from transformers import PreTrainedTokenizerBase
+import peft, transformers
 from huggingface_hub import hf_hub_download
+from text_generation_server.pb import generate_pb2
 
-import os
 import time
 from opentelemetry import trace
 from typing import Optional, Tuple, List, Type, Dict
 from text_generation_server.models import Model
-from text_generation_server.utils.tokens import batch_top_tokens
 from text_generation_server.models.types import (
     Batch,
     Tokens,
@@ -29,7 +29,6 @@ from loguru import logger
 tracer = trace.get_tracer(__name__)
 
 from .causal_lm import CausalLMBatch
-from collections import defaultdict
 
 def weight_convert(weights, rank):
     qA, qB, kA, kB, vA, vB, oA, oB = [], [], [], [], [], [], [], []
@@ -97,9 +96,166 @@ def weight_convert(weights, rank):
                     weights[key] = torch.cat([weights[key], complement], dim=2)
     return weights
 
+class TextGenerationChunk(TypedDict):
+    index: int
+    token_id: int
+    text: str
+    is_stop: bool
+
 @dataclass
 class PunicaBatch(CausalLMBatch):
     lora_ids = [] #it goes wrong when lora_ids: List[str] = []
+
+    @classmethod
+    def from_pb(
+            cls,
+            pb: generate_pb2.Batch,
+            tokenizer: PreTrainedTokenizerBase = None,
+            dtype: torch.dtype = None,
+            device: torch.device = None,
+    ) -> "CausalLMBatch":
+        input_ids = []
+        next_token_choosers = []
+        stopping_criterias = []
+        top_n_tokens = []
+        prefix_offsets = []
+        read_offsets = []
+        requests_idx_mapping = {}
+
+        # Parse batch
+        for i, r in enumerate(pb.requests):
+            requests_idx_mapping[r.id] = i
+            next_token_choosers.append(
+                NextTokenChooser.from_pb(r.parameters, device, tokenizer)
+            )
+            stopping_criteria = StoppingCriteria.from_pb(
+                r.stopping_parameters, tokenizer
+            )
+            stopping_criterias.append(stopping_criteria)
+            top_n_tokens.append(r.top_n_tokens)
+            tokenized_inputs = tokenizer.encode(r.inputs)
+            input_len = len(tokenized_inputs)
+            prefix_offsets.append(input_len - 5)
+            read_offsets.append(input_len)
+            input_ids.append(tokenized_inputs)
+
+        top_n_tokens_tensor = torch.tensor(
+            top_n_tokens, device=device, dtype=torch.int64
+        )
+
+        return cls(
+            batch_id=pb.id,
+            requests=pb.requests,
+            requests_idx_mapping=requests_idx_mapping,
+            input_ids=input_ids,
+            attention_mask=None,
+            position_ids=None,
+            past_key_values=None,
+            all_input_ids=None,
+            input_lengths=None,
+            prefix_offsets=prefix_offsets,
+            read_offsets=read_offsets,
+            next_token_choosers=next_token_choosers,
+            stopping_criterias=stopping_criterias,
+            top_n_tokens=top_n_tokens,
+            top_n_tokens_tensor=top_n_tokens_tensor,
+            max_input_length=None,
+            padding_right_offset=None,
+            max_tokens=None,
+        )
+
+class RequestContext:
+    def __init__(
+        self,
+        input_ids: list[int],
+        kvpool: KvPool,
+        lora_id: str,
+        tokenizer,
+        *,
+        temperature: float,
+        repetition_penalty: float,
+        top_p: float,
+        top_k: int,
+        maxlen: int,
+        stop_token_id: int,
+    ):
+        self.temperature = temperature
+        self.repetition_penalty = repetition_penalty
+        self.top_p = top_p
+        self.top_k = top_k
+        self.maxlen = maxlen
+        self.stop_token_id = stop_token_id
+
+        # Logits processing adapted from: https://github.com/lm-sys/FastChat/blob/bb7ca37c2bfad629ba4751dec188bdcdc2cf0c81/fastchat/serve/inference.py
+        self.logits_processor = transformers.LogitsProcessorList()
+        if temperature > 0 and temperature != 1.0:
+            self.logits_processor.append(
+                transformers.TemperatureLogitsWarper(temperature)
+            )
+        if repetition_penalty > 1.0:
+            self.logits_processor.append(
+                transformers.RepetitionPenaltyLogitsProcessor(repetition_penalty)
+            )
+        if 0 < top_p < 1.0:
+            self.logits_processor.append(transformers.TopPLogitsWarper(top_p))
+        if top_k > 0:
+            self.logits_processor.append(transformers.TopKLogitsWarper(top_k))
+
+        self.output_ids = [int(x) for x in input_ids]
+        self.prompt_len = len(self.output_ids)
+        self.kvcache = KvCache(kvpool, self.prompt_len)
+        self.lora_id = lora_id
+        self.tokenizer = tokenizer
+        self.prefix_offset = 0
+        self.read_offset = 0
+
+    def get_next_token_id(self, logits: torch.Tensor) -> int:
+        if self.logits_processor:
+            if self.repetition_penalty > 1.0:
+                t = torch.as_tensor([self.output_ids], device=logits.device)
+            else:
+                t = None
+            last_token_logits = self.logits_processor(t, logits[-1].unsqueeze(0))[0]
+        else:
+            last_token_logits = logits[-1, :]
+
+        if self.temperature <= 0 or self.top_p <= 0:
+            _, indices = torch.topk(last_token_logits, 2)
+        else:
+            probs = torch.softmax(last_token_logits, dim=-1)
+            indices = torch.multinomial(probs, num_samples=2)
+        token = int(indices.tolist()[0])
+        return token
+
+    def append_token(self, token_id: int):
+        self.output_ids.append(token_id)
+
+    def is_stop(self) -> int:
+        if len(self.output_ids) >= self.maxlen:
+            return True
+        if self.output_ids[-1] == self.stop_token_id:
+            return True
+        return False
+
+    def is_prefill(self) -> bool:
+        return len(self.output_ids) == self.prompt_len
+
+    def decode_tokens(self) -> str:
+        # Adapted from: https://github.com/huggingface/text-generation-inference/blob/a5def7c222174e03d815f890093584f3e815c5ce/server/text_generation_server/models/model.py#L68
+        prefix_text = self.tokenizer.decode(
+            self.output_ids[self.prefix_offset : self.read_offset],
+            skip_special_tokens=True,
+        )
+        new_text = self.tokenizer.decode(
+            self.output_ids[self.prefix_offset :], skip_special_tokens=True
+        )
+        if len(new_text) > len(prefix_text) and not new_text.endswith("\uFFFD"):
+            new_text = new_text[len(prefix_text) :]
+            self.prefix_offset = self.read_offset
+            self.read_offset = len(self.output_ids)
+            return new_text
+        else:
+            return ""
 
 class PunicaLM(Model):
     def __init__(
@@ -127,14 +283,7 @@ class PunicaLM(Model):
 
         self.device = device
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_id,
-            revision=revision,
-            padding_side="left",
-            truncation_side="left",
-            trust_remote_code=trust_remote_code,
-            use_fast=True,
-        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = LlamaForCausalLM.from_pretrained(
             model_id,
             revision=revision,
@@ -184,6 +333,8 @@ class PunicaLM(Model):
             self.model_config,
             device=device,
             )
+
+        self.reqctx: dict[Any, RequestContext] = {}
 
         super(PunicaLM, self).__init__(
             model=model,
@@ -236,6 +387,16 @@ class PunicaLM(Model):
                 self.lora_weights[lora_id] = lora_weight
                 logger.info(f'{lora_id} loaded!')
 
+    def _delete_request(self, reqid: Any):
+        reqctx = self.reqctx.pop(reqid)
+        reqctx.kvcache.release()
+
+    def cancel_request(self, reqid: Any):
+        self._delete_request(reqid)
+
+    def has_request(self):
+        return len(self.reqctx)>0
+
     @property
     def batch_type(self) -> Type[PunicaBatch]:
         return PunicaBatch
@@ -245,38 +406,66 @@ class PunicaLM(Model):
             generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
+    def add_request(self, batch: PunicaBatch):
+        for r in range(len(batch.requests)):
+            req = batch.requests[r]
+            input = batch.input_ids[r]
+            parameters = req.parameters
+            stop = req.stopping_parameters
+
+            if req.id in self.reqctx:
+                raise ValueError("Request already exists", req.id)
+            if req.lora_id not in self.lora_weights:
+                raise ValueError("Cannot find lora weights", req.lora_id)
+
+            self.reqctx[req.id] = RequestContext(
+                input,
+                self.kvpool,
+                req.lora_id,
+                self.tokenizer,
+                temperature=parameters.temperature,
+                repetition_penalty=parameters.repetition_penalty,
+                top_p=parameters.top_p,
+                top_k=parameters.top_k,
+                maxlen=min(stop.max_new_tokens, 4096),
+                stop_token_id=self.tokenizer.eos_token_id,
+            )
+
     @tracer.start_as_current_span("generate_token")
     @torch.no_grad()
     def generate_token(
         self, batch: PunicaBatch
     )-> Tuple[List[Generation], Optional[PunicaBatch], Tuple[int, int]]:
         start = time.time_ns()
+
+        if batch.requests:
+            self.add_request(batch)
+
+        if not self.reqctx:
+            return None, batch, (0, 0)
+
+        reqs = sorted(
+            self.reqctx.items(),
+            key=lambda kv: (not kv[1].is_prefill(), kv[1].lora_id),
+        )
+
         prefill_input_ids, prefill_lens, prefill_kv = [], [], []
         decode_input_ids, decode_kv = [], []
         lora_ids, lora_lens = [], []
 
-        batch.lora_ids = [r.lora_id for r in batch.requests] #['empty' for _ in range(len(batch.requests))]
-        for i,(request,ids,stopc,lora_id) in enumerate(zip(
-            batch.requests,
-            batch.input_ids,
-            batch.stopping_criterias,
-            batch.lora_ids,
-            )):
-            if stopc.current_tokens == 0:
-                prefill_input_ids.extend(ids)
-                prefill_lens.append(len(ids))
-                kv_cache = KvCache(self.kvpool, len(ids))
-                self.cache_pool[str(request.id)] = kv_cache
-                prefill_kv.append(kv_cache)
+        for _, reqctx in reqs:
+            if reqctx.is_prefill():
+                prefill_input_ids.extend(reqctx.output_ids)
+                prefill_lens.append(len(reqctx.output_ids))
+                prefill_kv.append(reqctx.kvcache)
             else:
-                decode_input_ids.append(ids)
-                kv_cache = self.cache_pool[str(request.id)]
-                decode_kv.append(kv_cache)
-                kv_cache.acquire_one()
-            if lora_ids and lora_ids[-1] == lora_id:
+                decode_input_ids.append(reqctx.output_ids[-1])
+                decode_kv.append(reqctx.kvcache)
+                reqctx.kvcache.acquire_one()
+            if lora_ids and lora_ids[-1] == reqctx.lora_id:
                 lora_lens[-1] += 1
             else:
-                lora_ids.append(lora_id)
+                lora_ids.append(reqctx.lora_id)
                 lora_lens.append(1)
 
         input_ids = torch.tensor(
@@ -294,199 +483,34 @@ class PunicaLM(Model):
         # Forward pass
         logits, _ = self.model(input_ids, blen, prefill_kv, decode_kv, lora)
 
-        ptr = 0
-        out = []
-        for l in prefill_lens:
-            out.append(logits[ptr:ptr+l].unsqueeze(0))
-            ptr += l
+        start_decode = time.time_ns()
 
-        for l in range(len(decode_input_ids)):
-            out.append(logits[ptr:ptr+1].unsqueeze(0))
-            ptr += 1
-
-        logits = torch.cat(out,dim=0)
+        if prefill_kv:
+            if decode_kv:
+                logits = torch.cat([logits[blen.indptr[1:] - 1], logits[blen.doff:]])
+            else:
+                logits = logits[blen.indptr[1:] - 1]
 
         generations: List[Generation] = []
-        stopped = True
-
-        # Speculation is not active for causal
-        accepted_ids = torch.ones_like(batch.input_ids)[:, 0]
-        batch_top_token_ids, batch_top_token_logprobs = batch_top_tokens(
-            batch.top_n_tokens,
-            batch.top_n_tokens_tensor,
-            torch.log_softmax(logits[:, -1,:], -1),
-            accepted_ids,
-        )
-
-        start_decode = time.time_ns()
-        iterator = zip(
-            batch.requests,
-            batch.input_lengths,
-            batch.prefix_offsets,
-            batch.read_offsets,
-            logits,
-            batch.next_token_choosers,
-            batch.stopping_criterias,
-            batch.all_input_ids,
-            batch.top_n_tokens,
-            batch_top_token_ids,
-            batch_top_token_logprobs,
-        )
-
-        for i, (
-            request,
-            input_length,
-            prefix_offset,
-            read_offset,
-            logits,
-            next_token_chooser,
-            stopping_criteria,
-            all_input_ids,
-            top_n_tokens,
-            top_token_ids,
-            top_token_logprobs,
-        ) in enumerate(iterator):
-            # Select next token
-            next_token_id, logprobs = next_token_chooser(
-                all_input_ids.view(1, -1), logits[-1:, :]
+        for i, (reqid, reqctx) in enumerate(reqs):
+            next_token_id = reqctx.get_next_token_id(logits[i].unsqueeze(0))
+            reqctx.append_token(next_token_id)
+            text = reqctx.decode_tokens()
+            if reqctx.is_stop():
+                self._delete_request(reqid)
+            generation = Generation(
+                reqid,
+                None,
+                Tokens(
+                    [next_token_id],
+                    None,
+                    [text],
+                    [next_token_id in self.all_special_ids]
+                ),
+                None,
+                None,
             )
-            # Append next token to all tokens
-            all_input_ids = torch.cat([all_input_ids, next_token_id])
-            new_input_length = input_length + 1
-            # Generated token
-            next_token_logprob = logprobs[-1, next_token_id]
-            next_token_id_squeezed = next_token_id.squeeze()
-            next_token_text, prefix_offset, read_offset = self.decode_token(
-                all_input_ids[:, 0], prefix_offset, read_offset
-            )
-            # Evaluate stopping criteria
-            stop, reason = stopping_criteria(
-                next_token_id_squeezed,
-                next_token_text,
-            )
-            if not stop:
-                stopped = False
-            # Shard generations
-            # All generations will be appended in the rust sharded client
-            if i % self.world_size == self.rank:
-                if stop:
-                    # Decode generated tokens
-                    output_text, _, _ = self.decode_token(
-                        all_input_ids[:, 0],
-                        prefix_offset=len(all_input_ids)
-                        - stopping_criteria.current_tokens
-                        - 1,
-                        read_offset=len(all_input_ids)
-                        - stopping_criteria.current_tokens,
-                        skip_special_tokens=True,
-                    )
-                    # Get seed
-                    if isinstance(next_token_chooser.choice, Sampling):
-                        seed = next_token_chooser.choice.seed
-                    else:
-                        seed = None
-
-                    generated_text = GeneratedText(
-                        output_text, stopping_criteria.current_tokens, reason, seed
-                    )
-
-                    # release kv-cache
-                    self.cache_pool[str(request.id)].release()
-                    del self.cache_pool[str(request.id)]
-
-                else:
-                    generated_text = None
-
-                # Prefill
-                if stopping_criteria.current_tokens == 1 and request.prefill_logprobs:
-                    # Remove generated token to only have prefill and add nan for first prompt token
-                    prefill_logprobs = [float("nan")] + torch.log_softmax(
-                        logits, -1
-                    ).gather(1, all_input_ids[1:]).squeeze(1)[
-                        -new_input_length:-1
-                    ].tolist()
-                    prefill_token_ids = all_input_ids[-new_input_length:-1]
-                    prefill_texts = self.tokenizer.batch_decode(
-                        prefill_token_ids,
-                        clean_up_tokenization_spaces=False,
-                        skip_special_tokens=False,
-                    )
-                    prefill_tokens = Tokens(
-                        prefill_token_ids,
-                        prefill_logprobs,
-                        prefill_texts,
-                        is_special=[],
-                    )
-                else:
-                    prefill_tokens = None
-
-                if top_n_tokens > 0:
-                    all_top_tokens = []
-                    for top_token_ids, top_token_logprobs in zip(
-                        top_token_ids, top_token_logprobs
-                    ):
-                        toptoken_texts = self.tokenizer.batch_decode(
-                            top_token_ids,
-                            clean_up_tokenization_spaces=False,
-                            skip_special_tokens=False,
-                        )
-                        special_toptokens = [
-                            token_id in self.all_special_ids
-                            for token_id in top_token_ids
-                        ]
-                        top_tokens = Tokens(
-                            top_token_ids,
-                            top_token_logprobs,
-                            toptoken_texts,
-                            special_toptokens,
-                        )
-                        all_top_tokens.append(top_tokens)
-                    top_tokens = all_top_tokens
-                else:
-                    top_tokens = None
-
-                generation = Generation(
-                    request.id,
-                    prefill_tokens,
-                    Tokens(
-                        [next_token_id_squeezed],
-                        [next_token_logprob],
-                        [next_token_text],
-                        [next_token_id_squeezed.item() in self.all_special_ids],
-                    ),
-                    generated_text,
-                    top_tokens,
-                )
-
-                generations.append(generation)
-
-            # Update values
-            batch.next_token_choosers[i] = batch.next_token_choosers[i].advance_grammar(
-                next_token_id_squeezed.item()
-            )
-            batch.input_ids[i, 0] = next_token_id
-            batch.all_input_ids[i] = all_input_ids
-            batch.input_lengths[i] = new_input_length
-            batch.prefix_offsets[i] = prefix_offset
-            batch.read_offsets[i] = read_offset
-            batch.max_input_length = max(batch.max_input_length, new_input_length)
-
-        # We finished all generations in the batch; there is no next batch
-        if stopped:
-            forward_ns = start_decode - start
-            decode_ns = time.time_ns() - start_decode
-            return generations, None, (forward_ns, decode_ns)
-
-        # Slice unused values from prefill
-        batch.input_ids = batch.input_ids[:, :1]
-
-        # Update attention_mask as we added a new token to input_ids
-        batch.attention_mask[:, -batch.padding_right_offset] = 1
-        # Decrease right offset
-        batch.padding_right_offset -= 1
-
-        # Update position_ids
-        batch.position_ids = batch.position_ids[:, -1:] + 1
+            generations.append(generation)
 
         forward_ns = start_decode - start
         decode_ns = time.time_ns() - start_decode

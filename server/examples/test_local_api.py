@@ -56,22 +56,28 @@ def make_input(model_name, lora_or_base, id = 0):
             repetition_penalty=1.1
         ),
         stopping_parameters=generate_pb2.StoppingCriteriaParameters(
-            max_new_tokens=256,
+            max_new_tokens=2048,
             stop_sequences=[],
             ignore_eos_token=True))
     return request
 
-#requests = [make_input('gsm8k', 'base', 0), make_input('gsm8k', 'lora', 1)]
-requests = [make_input('viggo', 'lora', 0), make_input('gsm8k', 'lora', 1), make_input('viggo', 'lora', 2)]
+requests = [make_input('gsm8k', 'lora', 2), make_input('gsm8k', 'base', 1)]
 
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))
-pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float32, torch.device("cuda"))
+pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float16, torch.device("cuda"))
+
+model.add_request(pb_batch)
+
 results = {}
 for r in requests:
     results[r.id] = []
 
-while pb_batch:
-    generations, pb_batch, _ = model.generate_token(pb_batch)
+empty_pb_batch = PunicaBatch.from_pb(generate_pb2.Batch())
+
+while True:
+    generations, _, _ = model.generate_token(empty_pb_batch)
+    if not generations:
+        break
     for gen in generations:
         results[gen.request_id].append(gen.tokens.texts)
 
