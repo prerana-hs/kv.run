@@ -144,6 +144,7 @@ All-Reduce:
 
 ### Attention
 ![image](https://github.com/kvrun/Model-Serving/assets/104136162/6325b2d1-d011-4443-b960-1edfa25ee370)
+
 **QKV**: FlashLlamaAttention()@models/custom_modeling/flash_llama_modeling.py: 171  `self.query_key_value = load_attention(config, prefix, weights)`
 -> 
 load_attention()@models/custom_modeling/flash_llama_modeling.py: 105 `return TensorParallelColumnLinear.load_multi()`
@@ -153,7 +154,9 @@ load_attention()@models/custom_modeling/flash_llama_modeling.py: 105 `return Ten
 
 ### FeedForward
 ![image](https://github.com/kvrun/Model-Serving/assets/104136162/79b01fb7-e664-41f1-8bc1-186d48e7e9fc)
+
 **A**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 260
+
 **B**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 267
 
 >>>>>>> e789f01 (Update README.md)
