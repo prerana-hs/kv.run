@@ -253,5 +253,30 @@ cd /torch-MIL/third_party/text-generation-inference/server
 make install
 ```
 
+## Model Deployment and Reasoning
+In this setion, FlashLlama is used as an example. Root path for the folllowing relative path is: text-generation-inference/server/text_generation_server
+
+### Tensor Parallel
+A Reference from Zhihu: [Link](https://zhuanlan.zhihu.com/p/626008269)
+
+Column-wise Parallel: `TensorParallelColumnLinear()` @utils/layers.py
+
+Row-wise Parallel: `TensorParallelRowLinear()` @utils/layers.py
+
+All-Reduce: 
+
+### Attention
+![image](https://github.com/kvrun/Model-Serving/assets/104136162/6325b2d1-d011-4443-b960-1edfa25ee370)
+**QKV**: FlashLlamaAttention()@models/custom_modeling/flash_llama_modeling.py: 171  `self.query_key_value = load_attention(config, prefix, weights)`
+-> 
+load_attention()@models/custom_modeling/flash_llama_modeling.py: 105 `return TensorParallelColumnLinear.load_multi()`
+
+**B**: FlashLlamaAttention()@models/custom_modeling/flash_llama_modeling.py: 173 
+
+
+### FeedForward
+![image](https://github.com/kvrun/Model-Serving/assets/104136162/79b01fb7-e664-41f1-8bc1-186d48e7e9fc)
+**A**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 260
+**B**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 267
 
 >>>>>>> e789f01 (Update README.md)
