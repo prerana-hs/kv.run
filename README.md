@@ -424,9 +424,42 @@ class LlamaMLP(nn.Module):
 #### FeedForward
 ![image](https://github.com/kvrun/Model-Serving/assets/104136162/79b01fb7-e664-41f1-8bc1-186d48e7e9fc)
 
-**A**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 260  `self.gate_up_proj = TensorParallelColumnLinear.load_multi()`
+``` python
+# LlamaMLP() @models/custom_modeling/flash_llama_modeling.py
+class LlamaMLP(nn.Module):
+    def __init__(self, prefix, config, weights):
+        super().__init__()
+        act = config.hidden_act
+        self.act = (
+            ACT2FN[act]
+            if "gelu" not in act
+            else lambda x: torch.nn.functional.gelu(
+                x,
+                approximate=(
+                    "tanh" if act in ["gelu_fast", "gelu_pytorch_tanh"] else "none"
+                ),
+            )
+        )
+        # Fuse gate and up proj, A is dealt here
+        self.gate_up_proj = TensorParallelColumnLinear.load_multi(
+            config,
+            prefixes=[f"{prefix}.gate_proj", f"{prefix}.up_proj"],
+            weights=weights,
+            dim=0,
+            bias=False,
+        )
+        # B is dealt here
+        self.down_proj = TensorParallelRowLinear.load(
+            config,
+            prefix=f"{prefix}.down_proj",
+            weights=weights,
+            bias=False,
+        )
+        self.intermediate_size = (
+            config.intermediate_size // weights.process_group.size()
+        )
 
-**B**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 267  `self.down_proj = TensorParallelRowLinear.load()`
+```
 >>>>>>> ddffeed (Update README.md)
 
 
@@ -553,6 +586,7 @@ make install
 
 Some of the important class and functions used:
 
+#### Weight() @utils/weight.py
 ``` python
 
 ```
