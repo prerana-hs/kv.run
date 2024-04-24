@@ -25,6 +25,6 @@ make install
 ## To test Punica Llama with APIs
 
 ```bash
-cd builp/server
+cd build/server
 python examples/test_local_api.py 
 ```
