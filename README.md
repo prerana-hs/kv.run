@@ -317,6 +317,7 @@ All-Reduce: `torch.distributed.all_reduce()`
 #### Attention
 ![image](https://github.com/kvrun/Model-Serving/assets/104136162/6325b2d1-d011-4443-b960-1edfa25ee370)
 
+<<<<<<< HEAD
 ``` python
 # FlashLlamaAttention() @models/custom_modeling/flash_llama_modeling.py
 class FlashLlamaAttention(torch.nn.Module): 
@@ -361,12 +362,22 @@ class FlashLlamaAttention(torch.nn.Module):
             weights=weights,
             bias=False,
         )
+=======
+
+
+**QKV**: FlashLlamaAttention()@models/custom_modeling/flash_llama_modeling.py: 171  `self.query_key_value = load_attention(config, prefix, weights)`
+-> 
+load_attention()@models/custom_modeling/flash_llama_modeling.py: 105 `return TensorParallelColumnLinear.load_multi()`
+
+**B**: FlashLlamaAttention()@models/custom_modeling/flash_llama_modeling.py: 173 `self.o_proj = TensorParallelRowLinear.load()`
+>>>>>>> ddffeed (Update README.md)
 
         self.num_groups = self.num_heads // self.num_key_value_heads
         self.kv_head_mapping = torch.arange(
             0, self.num_key_value_heads, dtype=torch.int32, device=weights.device
         ).repeat_interleave(self.num_groups)
 
+<<<<<<< HEAD
 ```
 
 
@@ -409,6 +420,14 @@ class LlamaMLP(nn.Module):
         )
 
 ```
+=======
+#### FeedForward
+![image](https://github.com/kvrun/Model-Serving/assets/104136162/79b01fb7-e664-41f1-8bc1-186d48e7e9fc)
+
+**A**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 260  `self.gate_up_proj = TensorParallelColumnLinear.load_multi()`
+
+**B**: LlamaMLP()@models/custom_modeling/flash_llama_modeling.py: 267  `self.down_proj = TensorParallelRowLinear.load()`
+>>>>>>> ddffeed (Update README.md)
 
 
 ### Model load
@@ -454,6 +473,7 @@ The following code offers a calling logic in FlashLlama model of TGI, in this ca
   self.post_attention_layernorm = FastRMSNorm.load()
 
 ```
+<<<<<<< HEAD
 
 Some of the important class and functions used:
 
@@ -529,4 +549,12 @@ make install
 '''
 >>>>>>> 04b24b6 (Update README.md)
 
+=======
+
+Some of the important class and functions used:
+
+``` python
+
+```
+>>>>>>> ddffeed (Update README.md)
 
