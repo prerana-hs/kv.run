@@ -257,6 +257,8 @@ class RequestContext:
         else:
             return ""
 
+EmptyPunicaBatch = PunicaBatch.from_pb(generate_pb2.Batch())
+
 class PunicaLM(Model):
     def __init__(
         self,

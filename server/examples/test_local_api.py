@@ -1,34 +1,36 @@
-import grpc
-from text_generation_server.pb import generate_pb2_grpc, generate_pb2
-from text_generation_server.models import Model, get_model
-from transformers import AutoTokenizer
+from text_generation_server.pb import generate_pb2
 import torch
-from text_generation_server.utils import weight_hub_files, download_weights
-from text_generation_server.models.punica_causal_lm import PunicaLM, PunicaBatch
+from text_generation_server.models.punica_causal_lm import PunicaLM, PunicaBatch, EmptyPunicaBatch
 import random
 from test_cases import DEMO, LoraSpec
 
-model = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
+# Load model
+service = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
                lora_ids={'gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})
-print(model.get_lora_adapters())
+tokenizer = service.tokenizer
 
-model.remove_lora_adapters(['gsm8k'])
-print(model.get_lora_adapters())
-model.remove_lora_adapters()
-print(model.get_lora_adapters())
+# Test print lora adapters
+print(service.get_lora_adapters())
 
-model.load_lora_adapters({'gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16',
+# Test remove lora adapters
+service.remove_lora_adapters(['gsm8k'])
+print(service.get_lora_adapters())
+service.remove_lora_adapters()
+print(service.get_lora_adapters())
+
+# Test load lora adapters
+service.load_lora_adapters({'gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16',
                          'sqlctx':'abcdabcd987/sqlctx-llama2-7b-lora-16',
                          'viggo':'abcdabcd987/viggo-llama2-7b-lora-16'})
-print(model.get_lora_adapters())
+print(service.get_lora_adapters())
 
-tokenizer = model.tokenizer
-
+# Load demo inputs
 lora_specs = {}
 for name, spec in DEMO.items():
     lora_prompts, base_prompts = spec.generate_prompts()
     lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
 
+# Create input requests
 def make_input(model_name, lora_or_base, id = 0):
     if lora_or_base == "lora":
         prompts = lora_specs[model_name].lora_prompts
@@ -38,9 +40,7 @@ def make_input(model_name, lora_or_base, id = 0):
         lora_id = "empty"
     else:
         raise ValueError(f"Unknown lora_or_base={lora_or_base}")
-    prompt = prompts[1] #random.choice(prompts)
-
-    # Try out prefill / decode from the client side
+    prompt = random.choice(prompts)
     request = generate_pb2.Request(
         inputs=prompt,
         lora_id=lora_id,
@@ -61,21 +61,24 @@ def make_input(model_name, lora_or_base, id = 0):
             ignore_eos_token=True))
     return request
 
+# Create an input batch of two queries
 requests = [make_input('gsm8k', 'lora', 2), make_input('gsm8k', 'base', 1)]
-
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))
 pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float16, torch.device("cuda"))
 
-model.add_request(pb_batch)
+# Add input batch to model service
+service.add_request(pb_batch)
 
 results = {}
 for r in requests:
     results[r.id] = []
 
-empty_pb_batch = PunicaBatch.from_pb(generate_pb2.Batch())
-
+# Iterative generation: each step generates a token for each input in the batch
 while True:
-    generations, _, _ = model.generate_token(empty_pb_batch)
+    # When calling iterative text generation, we may add new inputs (use pb_batch like above)
+    # or use an empty batch (use EmptyPunicaBatch)
+    generations, _, _ = service.generate_token(EmptyPunicaBatch)
+    # Stop if all input generations are done
     if not generations:
         break
     for gen in generations:
