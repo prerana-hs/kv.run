@@ -22,7 +22,7 @@ You can debug/edit code in the build folder. When done, use python copy_back.py 
 make install
 ```
 
-## To test Punica Llama with GPRC server
+## To test Punica Llama with APIs
 
 ```bash
 cd builp/server
