@@ -340,7 +340,7 @@ class PunicaLM(Model):
             device=device,
             )
 
-        self.reqctx: dict[Any, RequestContext] = {}
+        self.reqctx: dict[int, RequestContext] = {}
 
         super(PunicaLM, self).__init__(
             model=model,
@@ -420,8 +420,7 @@ class PunicaLM(Model):
             parameters = req.parameters
             stop = req.stopping_parameters
 
-            if req.id in self.reqctx:
-                raise ValueError("Request already exists", req.id)
+            req.id = max(list(self.reqctx)) + 1 if self.reqctx else 1
             if lora_id not in self.lora_weights:
                 raise ValueError("Cannot find lora weights", lora_id)
 

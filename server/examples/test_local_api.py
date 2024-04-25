@@ -31,7 +31,7 @@ for name, spec in DEMO.items():
     lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
 
 # Create input requests
-def make_input(model_name, lora_or_base, id = 0):
+def make_input(model_name, lora_or_base):
     if lora_or_base == "lora":
         prompts = lora_specs[model_name].lora_prompts
         lora_id = model_name
@@ -45,7 +45,6 @@ def make_input(model_name, lora_or_base, id = 0):
     inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
     request = generate_pb2.Request(
         inputs=inputs,
-        id=id,
         truncate=256,
         prefill_logprobs=True,
         top_n_tokens=20,
@@ -63,7 +62,7 @@ def make_input(model_name, lora_or_base, id = 0):
     return request
 
 # Create an input batch of two queries
-requests = [make_input('gsm8k', 'lora', 2), make_input('gsm8k', 'base', 1)]
+requests = [make_input('gsm8k', 'lora'), make_input('gsm8k', 'base')]
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))
 pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float16, torch.device("cuda"))
 
@@ -71,7 +70,7 @@ pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float16, torch.device("cu
 service.add_request(pb_batch)
 
 results = {}
-for r in requests:
+for r in pb_batch.requests:
     results[r.id] = []
 
 # Iterative generation: each step generates a token for each input in the batch
@@ -83,8 +82,8 @@ while True:
     if not generations:
         break
     for gen in generations:
-        results[gen.request_id].append(gen.tokens.texts)
+        results[gen.request_id].append(gen.tokens.texts[0])
 
 for id in results:
     print(str(id) + '='*30)
-    print(''.join([r[0] for r in results[id]]))
+    print(''.join(results[id]))

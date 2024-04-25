@@ -39,7 +39,6 @@ class MultiLora:
                                         'sqlctx':'abcdabcd987/sqlctx-llama2-7b-lora-16',
                                         'viggo':'abcdabcd987/viggo-llama2-7b-lora-16'})
         self.tokenizer = self.model.tokenizer
-        self.rid = 0
 
         # Create text generation requests
         self.reqname, self.reqtext = {}, {}
@@ -61,7 +60,6 @@ class MultiLora:
 
         request = generate_pb2.Request(
             inputs=inputs,
-            id=self.rid,
             truncate=256,
             prefill_logprobs=True,
             top_n_tokens=20,
@@ -76,13 +74,13 @@ class MultiLora:
                 max_new_tokens=2048,
                 stop_sequences=[],
                 ignore_eos_token=True))
-        self.rid += 1
         batch = generate_pb2.Batch(id = 0, requests = [request], size = 1)
         pb_batch = PunicaBatch.from_pb(batch, self.tokenizer, torch.float16, torch.device("cuda"))
         self.model.add_request(pb_batch)
-        self.reqname[request.id] = f'{model_name}-{lora_or_base}'
-        self.reqtext[request.id] = prompt
-        return request.id
+        id = pb_batch.requests[0].id
+        self.reqname[id] = f'{model_name}-{lora_or_base}'
+        self.reqtext[id] = prompt
+        return id
 
     def stop(self):
         self.stop_signal.set()

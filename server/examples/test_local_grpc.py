@@ -32,7 +32,6 @@ def make_input(model_name, lora_or_base, id = 0):
     request = generate_pb2.Request(
         inputs=prompt,
         lora_id=lora_id,
-        id=0,
         truncate=1024,
         prefill_logprobs=True,
         top_n_tokens=20,
@@ -90,6 +89,10 @@ with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
     # Decode
     dr = generate_pb2.DecodeRequest(batches = [cbatch])
     resp = stub.Decode(dr)
+    gen, cbatch = resp.generations, resp.batch
+    # Generate token
+    pr = generate_pb2.GenerateTokenRequest(batch = default_pb_batch)
+    resp = stub.GenerateToken(pr)
     gen, cbatch = resp.generations, resp.batch
 
     print('done')

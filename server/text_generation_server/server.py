@@ -177,7 +177,8 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
             self.model.remove_lora_adapters(request.lora_ids.split(','))
             return generate_pb2.AdapterControlResponse(status= "success")
 
-
+    async def GenerateToken(selfself, request, contexts):
+        return generate_pb2.GenerateTokenResponse()
 
 def serve(
     model_id: str,
