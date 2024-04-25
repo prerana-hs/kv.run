@@ -21,7 +21,7 @@ from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widgets import Footer, Header, Label
 
-import warnings
+import warnings, json
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
@@ -57,9 +57,10 @@ class MultiLora:
         else:
             raise ValueError(f"Unknown lora_or_base={lora_or_base}")
         prompt = random.choice(prompts)
+        inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
+
         request = generate_pb2.Request(
-            inputs=prompt,
-            lora_id=lora_id,
+            inputs=inputs,
             id=self.rid,
             truncate=256,
             prefill_logprobs=True,

@@ -1,7 +1,7 @@
 from text_generation_server.pb import generate_pb2
 import torch
 from text_generation_server.models.punica_causal_lm import PunicaLM, PunicaBatch, EmptyPunicaBatch
-import random
+import random, json
 from test_cases import DEMO, LoraSpec
 
 # Load model
@@ -41,9 +41,10 @@ def make_input(model_name, lora_or_base, id = 0):
     else:
         raise ValueError(f"Unknown lora_or_base={lora_or_base}")
     prompt = random.choice(prompts)
+
+    inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
     request = generate_pb2.Request(
-        inputs=prompt,
-        lora_id=lora_id,
+        inputs=inputs,
         id=id,
         truncate=256,
         prefill_logprobs=True,

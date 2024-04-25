@@ -10,6 +10,7 @@ from transformers import PreTrainedTokenizerBase
 import peft, transformers
 from huggingface_hub import hf_hub_download
 from text_generation_server.pb import generate_pb2
+import json
 
 import time
 from opentelemetry import trace
@@ -104,7 +105,7 @@ class TextGenerationChunk(TypedDict):
 
 @dataclass
 class PunicaBatch(CausalLMBatch):
-    lora_ids = [] #it goes wrong when lora_ids: List[str] = []
+    lora_ids = []
 
     @classmethod
     def from_pb(
@@ -124,6 +125,9 @@ class PunicaBatch(CausalLMBatch):
 
         # Parse batch
         for i, r in enumerate(pb.requests):
+            inputs = json.loads(r.inputs)
+            cls.lora_ids.append(inputs['lora_id'])
+            prompt = inputs['inputs']
             requests_idx_mapping[r.id] = i
             next_token_choosers.append(
                 NextTokenChooser.from_pb(r.parameters, device, tokenizer)
@@ -133,7 +137,7 @@ class PunicaBatch(CausalLMBatch):
             )
             stopping_criterias.append(stopping_criteria)
             top_n_tokens.append(r.top_n_tokens)
-            tokenized_inputs = tokenizer.encode(r.inputs)
+            tokenized_inputs = tokenizer.encode(prompt)
             input_len = len(tokenized_inputs)
             prefix_offsets.append(input_len - 5)
             read_offsets.append(input_len)
@@ -410,6 +414,7 @@ class PunicaLM(Model):
 
     def add_request(self, batch: PunicaBatch):
         for r in range(len(batch.requests)):
+            lora_id = batch.lora_ids[r]
             req = batch.requests[r]
             input = batch.input_ids[r]
             parameters = req.parameters
@@ -417,13 +422,13 @@ class PunicaLM(Model):
 
             if req.id in self.reqctx:
                 raise ValueError("Request already exists", req.id)
-            if req.lora_id not in self.lora_weights:
-                raise ValueError("Cannot find lora weights", req.lora_id)
+            if lora_id not in self.lora_weights:
+                raise ValueError("Cannot find lora weights", lora_id)
 
             self.reqctx[req.id] = RequestContext(
                 input,
                 self.kvpool,
-                req.lora_id,
+                lora_id,
                 self.tokenizer,
                 temperature=parameters.temperature,
                 repetition_penalty=parameters.repetition_penalty,
