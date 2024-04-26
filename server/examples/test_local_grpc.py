@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 import torch
 from text_generation_server.utils import weight_hub_files, download_weights
 from text_generation_server.models.punica_causal_lm import PunicaLM, PunicaBatch
-import random
+import random, json
 from test_cases import DEMO, LoraSpec
 
 # put this file in ROOT\server, so you don't need to compile TGI
@@ -28,10 +28,10 @@ def make_input(model_name, lora_or_base, id = 0):
         raise ValueError(f"Unknown lora_or_base={lora_or_base}")
     prompt = random.choice(prompts)
 
+    inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
     # Try out prefill / decode from the client side
     request = generate_pb2.Request(
-        inputs=prompt,
-        lora_id=lora_id,
+        inputs=inputs,
         truncate=1024,
         prefill_logprobs=True,
         top_n_tokens=20,
@@ -90,9 +90,20 @@ with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
     dr = generate_pb2.DecodeRequest(batches = [cbatch])
     resp = stub.Decode(dr)
     gen, cbatch = resp.generations, resp.batch
+
+    results = {}
+    for r in default_pb_batch.requests:
+        results[r.id] = []
     # Generate token
     pr = generate_pb2.GenerateTokenRequest(batch = default_pb_batch)
-    resp = stub.GenerateToken(pr)
-    gen, cbatch = resp.generations, resp.batch
-
+    while True:
+        resp = stub.GenerateToken(pr)
+        generations, cbatch = resp.generations, resp.batch
+        if not generations:
+            break
+        for gen in generations:
+            results[gen.request_id].append(gen.tokens.texts[0])
+    for id in results:
+        print(str(id) + '=' * 30)
+        print(''.join(results[id]))
     print('done')
