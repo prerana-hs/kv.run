@@ -177,9 +177,7 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
             self.model.remove_lora_adapters(request.lora_ids.split(','))
             return generate_pb2.AdapterControlResponse(status= "success")
 
-    async def GenerateToken(selfself, request, contexts):
-        return generate_pb2.GenerateTokenResponse()
-
+    async def GenerateToken(self, request, contexts):
         start = time.time_ns()
         if (
                 self.model.batch_type == IdeficsCausalLMBatch
@@ -196,7 +194,7 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
                 request.batch, self.model.tokenizer, self.model.dtype, self.model.device
             )
 
-        generations, next_batch, timings = self.model.generate_token(request)
+        generations, next_batch, timings = self.model.generate_token(batch)
         self.cache.set(next_batch)
 
         return generate_pb2.PrefillResponse(

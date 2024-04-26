@@ -449,8 +449,9 @@ class PunicaLM(Model):
     )-> Tuple[List[Generation], Optional[PunicaBatch], Tuple[int, int]]:
         start = time.time_ns()
 
-        if batch.requests:
-            self.add_request(batch)
+        if hasattr(batch, 'requests') and batch.requests:
+            ids = self.add_request(batch)
+            print("====Request " + str(ids) + " added.")
 
         if not self.reqctx:
             return None, batch, (0, 0)
