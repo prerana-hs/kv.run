@@ -257,7 +257,9 @@ make install
 In this setion, FlashLlama is used as an example. Root path for the folllowing relative path is: text-generation-inference/server/text_generation_server
 
 ### Tensor Parallel
-A Reference from Zhihu: [Link](https://zhuanlan.zhihu.com/p/626008269)
+References from Zhihu: 
+[Megatron详解](https://zhuanlan.zhihu.com/p/366906920)
+[Tensor Parallel](https://zhuanlan.zhihu.com/p/626008269)
 
 Column-wise Parallel: `TensorParallelColumnLinear()` @utils/layers.py
 ```python
