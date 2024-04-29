@@ -7,6 +7,12 @@ from test_cases import DEMO, LoraSpec
 # Load model
 service = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
                lora_ids={'gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})
+
+# With validate_flashinfer = True, the attention computation will be validated against the flashinfer implementation
+# Exception will be raised if there is discrepancy at any step
+# service = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
+#                lora_ids={'gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'}, validate_flashinfer=True)
+
 tokenizer = service.tokenizer
 
 # Test print lora adapters
@@ -31,7 +37,7 @@ for name, spec in DEMO.items():
     lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
 
 # Create input requests
-def make_input(lora_id, lora_or_base):
+def make_input(lora_id, lora_or_base, promptOverride=None):
     if lora_or_base == "lora":
         prompts = lora_specs[lora_id].lora_prompts
     elif lora_or_base == "base" or lora_or_base == "empty":
@@ -39,7 +45,7 @@ def make_input(lora_id, lora_or_base):
         lora_id = "empty"
     else:
         raise ValueError(f"Unknown lora_or_base={lora_or_base}")
-    prompt = random.choice(prompts)
+    prompt = promptOverride or random.choice(prompts)
     inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
 
     request = generate_pb2.Request(
@@ -61,6 +67,8 @@ def make_input(lora_id, lora_or_base):
     return request
 
 # Create an input batch of two queries
+
+# requests = [make_input('gsm8k', 'base', "What is deep learning? "), make_input('gsm8k', 'base', "Where is WTC? ")]
 requests = [make_input('gsm8k', 'lora'), make_input('gsm8k', 'base')]
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))
 pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float16, torch.device("cuda"))
