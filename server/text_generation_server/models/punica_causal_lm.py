@@ -467,31 +467,32 @@ class PunicaLM(Model):
         ids = []
         for r in range(len(batch.requests)):
             id = batch.requests[r].id
-            if id not in self.reqctx:
-                lora_id = batch.lora_ids[r]
-                input = batch.input_ids[r]
-                parameters = batch.requests[r].parameters
-                stop = batch.requests[r].stopping_parameters
+            # todo: verify behavier
+            # if id not in self.reqctx:
+            lora_id = batch.lora_ids[r]
+            input = batch.input_ids[r]
+            parameters = batch.requests[r].parameters
+            stop = batch.requests[r].stopping_parameters
 
-                if lora_id not in self.lora_weights:
-                    raise ValueError("Cannot find lora weights", lora_id)
+            if lora_id not in self.lora_weights:
+                raise ValueError("Cannot find lora weights", lora_id)
 
-                self.reqctx[id] = RequestContext(
-                    batch.batch_id,
-                    id,
-                    input,
-                    self.kvpool,
-                    self.modelKvCacheFlashinfer,
-                    lora_id,
-                    self.tokenizer,
-                    temperature=parameters.temperature,
-                    repetition_penalty=parameters.repetition_penalty,
-                    top_p=parameters.top_p,
-                    top_k=parameters.top_k,
-                    maxlen=min(stop.max_new_tokens, 4096),
-                    stop_token_id=self.tokenizer.eos_token_id,
-                )
-                ids.append(id)
+            self.reqctx[id] = RequestContext(
+                batch.batch_id,
+                id,
+                input,
+                self.kvpool,
+                self.modelKvCacheFlashinfer,
+                lora_id,
+                self.tokenizer,
+                temperature=parameters.temperature,
+                repetition_penalty=parameters.repetition_penalty,
+                top_p=parameters.top_p,
+                top_k=parameters.top_k,
+                maxlen=min(stop.max_new_tokens, 4096),
+                stop_token_id=self.tokenizer.eos_token_id,
+            )
+            ids.append(id)
         return ids
 
     @tracer.start_as_current_span("generate_token")
