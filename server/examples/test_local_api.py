@@ -1,6 +1,6 @@
 from text_generation_server.pb import generate_pb2
 import torch
-from text_generation_server.models.punica_causal_lm import PunicaLM, PunicaBatch, EmptyPunicaBatch
+from text_generation_server.models.punica_causal_lm import PunicaLM, PunicaBatch
 import random, json
 from test_cases import DEMO, LoraSpec
 
@@ -37,7 +37,7 @@ for name, spec in DEMO.items():
     lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
 
 # Create input requests
-def make_input(lora_id, lora_or_base, promptOverride=None):
+def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
     if lora_or_base == "lora":
         prompts = lora_specs[lora_id].lora_prompts
     elif lora_or_base == "base" or lora_or_base == "empty":
@@ -49,6 +49,7 @@ def make_input(lora_id, lora_or_base, promptOverride=None):
     inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
 
     request = generate_pb2.Request(
+        id=id,
         inputs=inputs,
         truncate=256,
         prefill_logprobs=True,
@@ -67,9 +68,8 @@ def make_input(lora_id, lora_or_base, promptOverride=None):
     return request
 
 # Create an input batch of two queries
-
-# requests = [make_input('gsm8k', 'base', "What is deep learning? "), make_input('gsm8k', 'base', "Where is WTC? ")]
-requests = [make_input('gsm8k', 'lora'), make_input('gsm8k', 'base')]
+# requests = [make_input('gsm8k', 'base', "What is deep learning? ", id=0), make_input('gsm8k', 'base', "Where is WTC? ", id=1)]
+requests = [make_input('gsm8k', 'lora', id=0), make_input('gsm8k', 'base', id=1)]
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))
 pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float16, torch.device("cuda"))
 
@@ -81,7 +81,7 @@ results = {}
 while True:
     # When calling iterative text generation, we may add new inputs (use pb_batch like above)
     # or use an empty batch (use EmptyPunicaBatch)
-    generations, _, _ = service.generate_token(EmptyPunicaBatch)
+    generations, _, _ = service.generate_token(PunicaBatch.Empty())
     # Stop if all input generations are done
     if not generations:
         break

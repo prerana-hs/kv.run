@@ -107,12 +107,35 @@ class TextGenerationChunk(TypedDict):
 @dataclass
 class PunicaBatch(CausalLMBatch):
     @classmethod
+    def Empty(cls):
+        return cls(
+            batch_id=None,
+            requests=None,
+            prefix_offsets=None,
+            read_offsets=None,
+            next_token_choosers=None,
+            stopping_criterias=None,
+            top_n_tokens=None,
+            top_n_tokens_tensor=None,
+            input_ids=None,
+            requests_idx_mapping=None,
+            attention_mask=None,
+            position_ids=None,
+            past_key_values=None,
+            all_input_ids=None,
+            input_lengths=None,
+            max_input_length=None,
+            padding_right_offset=None,
+            max_tokens=None,
+        )
+
+    @classmethod
     def from_pb(
             cls,
             pb: generate_pb2.Batch,
             tokenizer: PreTrainedTokenizerBase = None,
             dtype: torch.dtype = None,
-            device: torch.device = None,
+            device: torch.device = 'cuda',
     ) -> "CausalLMBatch":
         input_ids = []
         next_token_choosers = []
@@ -270,7 +293,6 @@ class RequestContext:
         else:
             return ""
 
-EmptyPunicaBatch = PunicaBatch.from_pb(generate_pb2.Batch())
 
 class PunicaLM(Model):
     def __init__(
@@ -368,7 +390,6 @@ class PunicaLM(Model):
             )
 
         self.reqctx: dict[int, RequestContext] = {}
-        self.reqid: int = 1
 
         super(PunicaLM, self).__init__(
             model=model,
@@ -450,13 +471,14 @@ class PunicaLM(Model):
             parameters = batch.requests[r].parameters
             stop = batch.requests[r].stopping_parameters
 
-            ids.append(self.reqid)
+            id = batch.requests[r].id
+            ids.append(id)
             if lora_id not in self.lora_weights:
                 raise ValueError("Cannot find lora weights", lora_id)
 
-            self.reqctx[self.reqid] = RequestContext(
+            self.reqctx[id] = RequestContext(
                 batch.batch_id,
-                self.reqid,
+                id,
                 input,
                 self.kvpool,
                 self.modelKvCacheFlashinfer,
@@ -469,7 +491,6 @@ class PunicaLM(Model):
                 maxlen=min(stop.max_new_tokens, 4096),
                 stop_token_id=self.tokenizer.eos_token_id,
             )
-            self.reqid += 1
         return ids
 
     @tracer.start_as_current_span("generate_token")
@@ -554,10 +575,11 @@ class PunicaLM(Model):
                     reqid, None,
                     Tokens(
                         [next_token_id],
-                        None,
+                        reqctx.output_ids[reqctx.prefix_offset : reqctx.read_offset],
                         [text],
                         [next_token_id in self.all_special_ids]
-                    ), None, None,
+                    ),
+                    None, None,
                 )
                 generations.append(generation)
 

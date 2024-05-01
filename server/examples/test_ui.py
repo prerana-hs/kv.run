@@ -33,6 +33,7 @@ class MultiLora:
         self.lora_specs = lora_specs
         self.stop_signal = threading.Event()
         self.base_model = "meta-llama/Llama-2-7b-hf"
+        self.id = 1
         # Load base model
         self.model = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
                                lora_ids={'gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16',
@@ -47,7 +48,6 @@ class MultiLora:
             for lora_or_base in ["lora", "base"]:
                 id, prompt = self._create_request(lora_id, lora_or_base)
                 self.reqname[id] = (lora_id, lora_or_base)
-        print('aaa')
 
     def _create_request(self, lora_id: str, lora_or_base: str):
         if lora_or_base == "lora":
@@ -61,6 +61,7 @@ class MultiLora:
         inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
 
         request = generate_pb2.Request(
+            id=self.id,
             inputs=inputs,
             truncate=256,
             prefill_logprobs=True,
@@ -78,8 +79,9 @@ class MultiLora:
                 ignore_eos_token=True))
         batch = generate_pb2.Batch(id = 0, requests = [request], size = 1)
         pb_batch = PunicaBatch.from_pb(batch, self.tokenizer, torch.float16, torch.device("cuda"))
-        id = self.model.add_request(pb_batch)[0]
-        return id, prompt
+        self.model.add_request(pb_batch)
+        self.id+=1
+        return self.id-1, prompt
 
     def stop(self):
         self.stop_signal.set()
@@ -100,8 +102,6 @@ class MultiLora:
                     append_box('-'.join(self.reqname[id]), "\n------\n\n")
                     model_name, lora_or_base = self.reqname[id]
                     nid, prompt = self._create_request(model_name, lora_or_base)
-                    if nid in self.reqname:
-                        print('aaaaa')
                     self.reqname[nid] = (model_name, lora_or_base)
                     append_box('-'.join(self.reqname[nid]), prompt)
                     self.finished.append(id)
