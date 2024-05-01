@@ -466,31 +466,32 @@ class PunicaLM(Model):
     def add_request(self, batch: PunicaBatch):
         ids = []
         for r in range(len(batch.requests)):
-            lora_id = batch.lora_ids[r]
-            input = batch.input_ids[r]
-            parameters = batch.requests[r].parameters
-            stop = batch.requests[r].stopping_parameters
-
             id = batch.requests[r].id
-            ids.append(id)
-            if lora_id not in self.lora_weights:
-                raise ValueError("Cannot find lora weights", lora_id)
+            if id not in self.reqctx:
+                lora_id = batch.lora_ids[r]
+                input = batch.input_ids[r]
+                parameters = batch.requests[r].parameters
+                stop = batch.requests[r].stopping_parameters
 
-            self.reqctx[id] = RequestContext(
-                batch.batch_id,
-                id,
-                input,
-                self.kvpool,
-                self.modelKvCacheFlashinfer,
-                lora_id,
-                self.tokenizer,
-                temperature=parameters.temperature,
-                repetition_penalty=parameters.repetition_penalty,
-                top_p=parameters.top_p,
-                top_k=parameters.top_k,
-                maxlen=min(stop.max_new_tokens, 4096),
-                stop_token_id=self.tokenizer.eos_token_id,
-            )
+                if lora_id not in self.lora_weights:
+                    raise ValueError("Cannot find lora weights", lora_id)
+
+                self.reqctx[id] = RequestContext(
+                    batch.batch_id,
+                    id,
+                    input,
+                    self.kvpool,
+                    self.modelKvCacheFlashinfer,
+                    lora_id,
+                    self.tokenizer,
+                    temperature=parameters.temperature,
+                    repetition_penalty=parameters.repetition_penalty,
+                    top_p=parameters.top_p,
+                    top_k=parameters.top_k,
+                    maxlen=min(stop.max_new_tokens, 4096),
+                    stop_token_id=self.tokenizer.eos_token_id,
+                )
+                ids.append(id)
         return ids
 
     @tracer.start_as_current_span("generate_token")
@@ -502,7 +503,8 @@ class PunicaLM(Model):
 
         if hasattr(batch, 'requests') and batch.requests:
             ids = self.add_request(batch)
-            print("====Request " + str(ids) + " added.")
+            if ids:
+                print("====Request " + str(ids) + " added.")
 
         if not self.reqctx:
             return None, batch, (0, 0)
@@ -569,19 +571,23 @@ class PunicaLM(Model):
 
             is_stop = reqctx.is_stop()
             if is_stop:
+                output_text, _, _  = self.decode_token(reqctx.output_ids[:reqctx.read_offset], skip_special_tokens=True)
+                generated_text = GeneratedText(output_text, reqctx.read_offset, 0, None)
                 self._delete_request(reqid)
             else:
-                generation = Generation(
-                    reqid, None,
-                    Tokens(
-                        [next_token_id],
-                        reqctx.output_ids[reqctx.prefix_offset : reqctx.read_offset],
-                        [text],
-                        [next_token_id in self.all_special_ids]
-                    ),
-                    None, None,
-                )
-                generations.append(generation)
+                generated_text = None
+
+            generation = Generation(
+                reqid, None,
+                Tokens(
+                    [next_token_id],
+                    reqctx.output_ids[reqctx.prefix_offset : reqctx.read_offset],
+                    [text],
+                    [next_token_id in self.all_special_ids]
+                ),
+                generated_text, None,
+            )
+            generations.append(generation)
 
         forward_ns = start_decode - start
         decode_ns = time.time_ns() - start_decode
