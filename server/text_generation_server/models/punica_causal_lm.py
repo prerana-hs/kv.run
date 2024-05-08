@@ -543,6 +543,8 @@ class PunicaLM(Model):
                 output_text, _, _  = self.decode_token(reqctx.output_ids[:reqctx.read_offset], skip_special_tokens=True)
                 generated_text = GeneratedText(output_text, reqctx.read_offset, 0, None)
                 #stoppedRequestIdSet.add(reqid)
+                self.reqctx.pop(requestId)
+                batchKvCache.release(requestId)
             else:
                 generated_text = None
 
