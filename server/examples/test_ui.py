@@ -28,22 +28,17 @@ warnings.filterwarnings(
 )
 
 class MultiLora:
-    def __init__(self, lora_specs: dict[str, LoraSpec]):
+    def __init__(self, base_model, lora_ids, lora_specs: dict[str, LoraSpec]):
         self.device = torch.device("cuda:0")
         self.lora_specs = lora_specs
         self.stop_signal = threading.Event()
-        self.base_model = "meta-llama/Llama-2-7b-hf"
         self.id = 1
         # Load base model
-        self.model = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
-                               lora_ids={'gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16',
-                                        'sqlctx':'abcdabcd987/sqlctx-llama2-7b-lora-16',
-                                        'viggo':'abcdabcd987/viggo-llama2-7b-lora-16'})
+        self.model = PunicaLM(model_id=base_model, lora_ids=lora_ids)
         self.tokenizer = self.model.tokenizer
 
         # Create text generation requests
         self.reqname = {}
-        self.finished = []
         for lora_id in lora_specs:
             for lora_or_base in ["lora", "base"]:
                 id, prompt = self._create_request(lora_id, lora_or_base)
@@ -96,15 +91,13 @@ class MultiLora:
             for gen in generations:
                 append_box('-'.join(self.reqname[gen.request_id]), gen.tokens.texts[0])
 
-            now = [gen.request_id for gen in generations]
-            for id in list(self.reqname):
-                if (id not in now) and (id not in self.finished):
-                    append_box('-'.join(self.reqname[id]), "\n------\n\n")
-                    model_name, lora_or_base = self.reqname[id]
+            for gen in generations:
+                if gen.generated_text: # finished
+                    append_box('-'.join(self.reqname[gen.request_id]), "\n------\n\n")
+                    model_name, lora_or_base = self.reqname[gen.request_id]
                     nid, prompt = self._create_request(model_name, lora_or_base)
                     self.reqname[nid] = (model_name, lora_or_base)
                     append_box('-'.join(self.reqname[nid]), prompt)
-                    self.finished.append(id)
             assert(len(self.model.reqctx) == 6)
 
 
@@ -172,13 +165,24 @@ class MultiLoraTui(App):
 if __name__ == '__main__':
     project_root = pathlib.Path(__file__).parents[1]
     model_dir = project_root / "model"
+
+    base_model = "meta-llama/Llama-2-7b-hf"
+    lora_ids = {'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16',
+                'llama2-sqlctx':'abcdabcd987/sqlctx-llama2-7b-lora-16',
+                'llama2-viggo':'abcdabcd987/viggo-llama2-7b-lora-16'}
+    # base_model = "tjluyao/llama-3-8b"
+    # lora_ids = {'llama3-math':'tjluyao/llama-3-8b-math',
+    #             'llama3-oaast': 'tjluyao/llama-3-8b-oaast',
+    #             'llama3-zh': 'tjluyao/llama-3-8b-zh'}
+
     lora_specs = {}
     for name, spec in DEMO.items():
-        lora_prompts, base_prompts = spec.generate_prompts()
-        lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
+        if name in list(lora_ids):
+            lora_prompts, base_prompts = spec.generate_prompts()
+            lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
 
-    logic = MultiLora(lora_specs)
-    tui = MultiLoraTui(list(DEMO.keys()))
+    logic = MultiLora(base_model, lora_ids, lora_specs)
+    tui = MultiLoraTui(list(lora_ids))
 
     def append_box(box_id, text):
         tui.post_message(MultiLoraTui.AppendBox(box_id, text))

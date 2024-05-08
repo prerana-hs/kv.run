@@ -42,10 +42,11 @@ class LlamaLoraWeight:
             dtype,
             device,
         )
+        is_llama3 = ('llama3' in config.name_or_path.replace('-', '').lower())
         self.k = LoraWeight(
             config.num_hidden_layers,
             config.hidden_size,
-            config.hidden_size,
+            1024 if is_llama3 else config.hidden_size,
             lora_rank,
             dtype,
             device,
@@ -53,7 +54,7 @@ class LlamaLoraWeight:
         self.v = LoraWeight(
             config.num_hidden_layers,
             config.hidden_size,
-            config.hidden_size,
+            1024 if is_llama3 else config.hidden_size,
             lora_rank,
             dtype,
             device,
@@ -138,10 +139,12 @@ class LlamaAttention(nn.Module):
             self.hidden_size, self.num_qo_heads * self.head_dim, bias=False
         )
         self.k_proj = nn.Linear(
-            self.hidden_size, self.num_kv_heads * self.head_dim, bias=False
+            config.hidden_size,
+            self.num_kv_heads * self.head_dim, bias=False
         )
         self.v_proj = nn.Linear(
-            self.hidden_size, self.num_kv_heads * self.head_dim, bias=False
+            config.hidden_size,
+            self.num_kv_heads * self.head_dim, bias=False
         )
         self.o_proj = nn.Linear(
             self.num_qo_heads * self.head_dim, self.hidden_size, bias=False

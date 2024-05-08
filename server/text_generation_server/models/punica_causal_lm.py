@@ -407,9 +407,16 @@ class PunicaLM(Model):
             return
         for lora_id in lora_ids:
             if lora_id not in self.lora_weights:
-                model_path = hf_hub_download(lora_ids[lora_id], filename='adapter_model.bin')
-                config_path = hf_hub_download(lora_ids[lora_id], filename='adapter_config.json')
+                try:
+                    model_path = hf_hub_download(lora_ids[lora_id], filename='adapter_model.bin')
+                except:
+                    from safetensors.torch import load_file
+                    model_path = hf_hub_download(lora_ids[lora_id], filename='adapter_model.safetensors')
+                    tmp = load_file(model_path, device="cpu")
+                    model_path = model_path.replace('.safetensors', '.bin')
+                    torch.save(tmp, model_path)
                 tmp = torch.load(model_path, map_location=device, weights_only=True)
+                config_path = hf_hub_download(lora_ids[lora_id], filename='adapter_config.json')
                 lora_rank = peft.config.PeftConfigMixin.from_json_file(config_path)['r']
                 if lora_rank < 16:
                     lora_weight = LlamaLoraWeight(model_config, lora_rank*2, dtype, device)
@@ -523,8 +530,8 @@ class PunicaLM(Model):
         decode_logits = raw_logits[prefillBatchPosition.total_seq_len:]
         logits = torch.cat([prefill_logits, decode_logits])
 
-        cancelledRequestIdSet = set(batchKvCache.kvCacheDict.keys()) - set(prefill_reqIds + decode_reqIds)
-        stoppedRequestIdSet = set()
+        #cancelledRequestIdSet = set(batchKvCache.kvCacheDict.keys()) - set(prefill_reqIds + decode_reqIds)
+        #stoppedRequestIdSet = set()
         generations: List[Generation] = []
         for i, (reqid, reqctx) in enumerate(reqs):
             next_token_id = reqctx.get_next_token_id(logits[i].unsqueeze(0))
@@ -535,7 +542,7 @@ class PunicaLM(Model):
             if is_stop:
                 output_text, _, _  = self.decode_token(reqctx.output_ids[:reqctx.read_offset], skip_special_tokens=True)
                 generated_text = GeneratedText(output_text, reqctx.read_offset, 0, None)
-                stoppedRequestIdSet.add(reqid)
+                #stoppedRequestIdSet.add(reqid)
             else:
                 generated_text = None
 
@@ -551,9 +558,9 @@ class PunicaLM(Model):
             )
             generations.append(generation)
             
-        for requestId in cancelledRequestIdSet | stoppedRequestIdSet:
-            self.reqctx.pop(requestId)
-            batchKvCache.release(requestId)
+        #for requestId in cancelledRequestIdSet | stoppedRequestIdSet:
+        #    self.reqctx.pop(requestId)
+        #    batchKvCache.release(requestId)
 
         forward_ns = start_decode - start
         decode_ns = time.time_ns() - start_decode
