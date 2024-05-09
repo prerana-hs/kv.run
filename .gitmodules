@@ -4,7 +4,3 @@
 [submodule "server/third_party/flashinfer"]
 	path = server/third_party/flashinfer
 	url = https://github.com/flashinfer-ai/flashinfer
-[submodule "third_party/text-generation-interface"]
-	path = third_party/text-generation-interface
-	url = https://github.com/huggingface/text-generation-inference
-	branch = v2.0.2
