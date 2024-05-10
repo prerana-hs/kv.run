@@ -4,7 +4,7 @@ import typer
 
 from pathlib import Path
 from loguru import logger
-from typing import Optional, List
+from typing import Optional
 from enum import Enum
 from huggingface_hub import hf_hub_download
 
@@ -19,6 +19,7 @@ class Quantization(str, Enum):
     gptq = "gptq"
     awq = "awq"
     eetq = "eetq"
+    fp8 = "fp8"
 
 
 class Dtype(str, Enum):
@@ -299,6 +300,13 @@ def download_weights(
         local_pt_files = utils.download_weights(pt_filenames, model_id, revision)
 
     if auto_convert:
+        if not trust_remote_code:
+            logger.warning(
+                f"????????BREAKING CHANGE in 2.0????????: Safetensors conversion is disabled without `--trust-remote-code` because "
+                f"Pickle files are unsafe and can essentially contain remote code execution!"
+                f"Please check for more information here: https://huggingface.co/docs/text-generation-inference/basic_tutorials/safety",
+            )
+
         logger.warning(
             f"No safetensors weights found for model {model_id} at revision {revision}. "
             f"Converting PyTorch weights to safetensors."
