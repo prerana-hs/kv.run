@@ -18,15 +18,21 @@ class KvCachePool:
         self.device = device
         self.max_pages = max_pages
         self.page_len = page_len
-        self.starting_free_page_idx = 0
+        self.free_page_mask = torch.ones(max_pages, dtype=torch.bool, device=device)
 
     def allocate(self, num_pages: int):
-        if self.starting_free_page_idx + num_pages > self.max_pages:
-            raise Exception("Flashinfer cache pool out of cache pages")
-        start_page_idx = self.starting_free_page_idx
-        self.starting_free_page_idx += num_pages
-        return [i for i in range(start_page_idx, start_page_idx + num_pages)]
-
+        free_page_indices = self.free_page_mask.nonzero()
+        assert (
+            len(free_page_indices) >= num_pages
+        ), f"Out of available cache pages: asked {num_pages}, only {len(free_page_indices)} free pages"
+        
+        allocated_indices = free_page_indices[:num_pages]
+        self.free_page_mask[allocated_indices] = False
+        return allocated_indices.squeeze(1).tolist()
+    
+    def deallocate(self, kv_page_indices: List[int]):
+        self.free_page_mask[kv_page_indices] = True
+        
 class RequestKvCache:
     def __init__(self, kvCachePool: KvCachePool, page_len:int, seq_init_len: int):
         self.kvCachePool = kvCachePool
@@ -41,7 +47,11 @@ class RequestKvCache:
         self.kv_last_page_len += 1
         if self.kv_last_page_len > self.page_len:
             self.kv_last_page_len -= self.page_len
-            self.kv_page_indices.extend(self.kvCachePool.allocate(1))
+            new_indices = self.kvCachePool.allocate(1)
+            self.kv_page_indices.extend(new_indices)
+            
+    def release(self):
+        self.kvCachePool.deallocate(self.kv_page_indices)
 
 class BatchKvCache:
     def __init__(self, kvCachePool: KvCachePool, page_len, device):
@@ -58,6 +68,7 @@ class BatchKvCache:
         return self.kvCacheDict[req_id]
     
     def release(self, req_id):
+        self.kvCacheDict[req_id].release()
         del self.kvCacheDict[req_id]
 
     def increment(self):

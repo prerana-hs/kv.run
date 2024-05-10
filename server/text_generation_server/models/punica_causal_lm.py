@@ -24,6 +24,7 @@ from text_generation_server.models.types import (
     GeneratedText,
 )
 from text_generation_server.utils import NextTokenChooser, StoppingCriteria, Sampling
+from text_generation_server.utils.dist import MEMORY_FRACTION
 from dataclasses import dataclass
 from transformers import AutoTokenizer
 
@@ -342,10 +343,34 @@ class PunicaLM(Model):
 
         self.model_config = model.config
         
-        TOTAL_NUM_PAGES_FLASHINFER = 500
+        # consider moving it into cache manager
         PAGE_LEN = 16
+        dtype_size = torch.tensor([], dtype=dtype).element_size()
+        cache_page_size = (
+            2 * 
+            PAGE_LEN * 
+            self.model_config.num_hidden_layers * 
+            self.model_config.num_attention_heads * 
+            (self.model_config.hidden_size // self.model_config.num_attention_heads) *
+            dtype_size
+        )
+        
+        currentDevice = torch.cuda.current_device()
+        total_free_memory, _ = torch.cuda.mem_get_info(currentDevice)
+        total_gpu_memory = torch.cuda.get_device_properties(currentDevice).total_memory
+        free_memory = max(
+            0, total_free_memory - (1 - MEMORY_FRACTION) * total_gpu_memory
+        )
+        num_pages_to_allocate = int(free_memory * 0.80 / cache_page_size)
+        print(f"Cache allocation:\n"
+            f"  Cache Page Size: {cache_page_size / 1024 / 1024} MB\n"
+            f"  Dtype Size: {dtype_size}\n"
+            f"  Free Memory: {free_memory / 1024 / 1024 / 1024} GB\n"
+            f"  Total GPU Memory: {total_gpu_memory / 1024 / 1024 / 1024} GB\n"
+            f"  Number of Pages to Allocate: {num_pages_to_allocate}")
+
         kvCachePool = KvCachePool(
-            max_pages=TOTAL_NUM_PAGES_FLASHINFER,
+            max_pages=num_pages_to_allocate,
             num_layers=self.model_config.num_hidden_layers,
             num_heads=self.model_config.num_key_value_heads,
             head_dim=self.model_config.hidden_size // self.model_config.num_attention_heads,
@@ -530,8 +555,6 @@ class PunicaLM(Model):
         decode_logits = raw_logits[prefillBatchPosition.total_seq_len:]
         logits = torch.cat([prefill_logits, decode_logits])
 
-        #cancelledRequestIdSet = set(batchKvCache.kvCacheDict.keys()) - set(prefill_reqIds + decode_reqIds)
-        #stoppedRequestIdSet = set()
         generations: List[Generation] = []
         for i, (reqid, reqctx) in enumerate(reqs):
             next_token_id = reqctx.get_next_token_id(logits[i].unsqueeze(0))
@@ -542,7 +565,6 @@ class PunicaLM(Model):
             if is_stop:
                 output_text, _, _  = self.decode_token(reqctx.output_ids[:reqctx.read_offset], skip_special_tokens=True)
                 generated_text = GeneratedText(output_text, reqctx.read_offset, 0, None)
-                #stoppedRequestIdSet.add(reqid)
                 self.reqctx.pop(requestId)
                 batchKvCache.release(requestId)
             else:
@@ -559,10 +581,6 @@ class PunicaLM(Model):
                 generated_text, None,
             )
             generations.append(generation)
-            
-        #for requestId in cancelledRequestIdSet | stoppedRequestIdSet:
-        #    self.reqctx.pop(requestId)
-        #    batchKvCache.release(requestId)
 
         forward_ns = start_decode - start
         decode_ns = time.time_ns() - start_decode
