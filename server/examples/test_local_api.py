@@ -4,31 +4,6 @@ from text_generation_server.models.punica_causal_lm import PunicaLM, PunicaBatch
 import random, json
 from test_cases import DEMO, LoraSpec
 
-# Load model
-# service = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
-#               lora_ids={'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})]
-
-service = PunicaLM(model_id="tjluyao/llama-3-8b",
-              lora_ids={'llama3-math':'tjluyao/llama-3-8b-math',
-                        'llama3-zh': 'tjluyao/llama-3-8b-zh'})
-
-tokenizer = service.tokenizer
-
-# Test print lora adapters
-print(service.get_lora_adapters())
-
-# Test remove lora adapters
-service.remove_lora_adapters(['llama3-zh'])
-print(service.get_lora_adapters())
-service.remove_lora_adapters()
-print(service.get_lora_adapters())
-
-# Test load lora adapters
-service.load_lora_adapters({'llama3-math':'tjluyao/llama-3-8b-math',
-                            'llama3-oaast': 'tjluyao/llama-3-8b-oaast',
-                            'llama3-zh': 'tjluyao/llama-3-8b-zh'})
-print(service.get_lora_adapters())
-
 # Load demo inputs
 lora_specs = {}
 for name, spec in DEMO.items():
@@ -66,15 +41,43 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
             ignore_eos_token=True))
     return request
 
-# Create an input batch of two queries
-requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1)]
-#requests = [make_input('llama2-gsm8k', 'base', id=0), make_input('llama2-gsm8k', 'lora', id=1)]
+test = 'llama-3'
+#test = 'llama-2'
+
+if test == 'llama-2':
+    # Load model
+    service = PunicaLM(model_id="meta-llama/Llama-2-7b-hf",
+              lora_ids={'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})
+    # Create an input batch of two queries
+    requests = [make_input('llama2-gsm8k', 'base', id=0), make_input('llama2-gsm8k', 'lora', id=1)]
+elif test == 'llama-3':
+    # Load model
+    service = PunicaLM(model_id="tjluyao/llama-3-8b",
+              lora_ids={'llama3-math':'tjluyao/llama-3-8b-math',
+                        'llama3-zh': 'tjluyao/llama-3-8b-zh'})
+    # Test load lora adapters
+    print(service.get_lora_adapters())
+    # Test remove lora adapters
+    service.remove_lora_adapters(['llama3-zh'])
+    print(service.get_lora_adapters())
+    service.remove_lora_adapters()
+    print(service.get_lora_adapters())
+    service.load_lora_adapters({'llama3-math':'tjluyao/llama-3-8b-math',
+                                'llama3-oaast': 'tjluyao/llama-3-8b-oaast',
+                                'llama3-zh': 'tjluyao/llama-3-8b-zh'})
+    # Create an input batch of two queries
+    requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1)]
+
+
+print(service.get_lora_adapters())
+tokenizer = service.tokenizer
+
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))
 pb_batch = PunicaBatch.from_pb(batch, tokenizer, torch.float16, torch.device("cuda"))
 
 # Add input batch to model service
 ids = service.add_request(pb_batch)
-results = {}
+display_results = {}
 
 # Iterative generation: each step generates a token for each input in the batch
 while True:
@@ -85,11 +88,11 @@ while True:
     if not generations:
         break
     for gen in generations:
-        if gen.request_id in results:
-            results[gen.request_id].append(gen.tokens.texts[0])
+        if gen.request_id in display_results:
+            display_results[gen.request_id].append(gen.tokens.texts[0])
         else:
-            results[gen.request_id] = [gen.tokens.texts[0]]
+            display_results[gen.request_id] = [gen.tokens.texts[0]]
 
-for id in results:
+for id in display_results:
     print(str(id) + '='*30)
-    print(''.join(results[id]))
+    print(''.join(display_results[id]))
