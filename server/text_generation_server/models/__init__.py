@@ -122,7 +122,7 @@ def get_model(
     speculate: Optional[int],
     dtype: Optional[str],
     trust_remote_code: bool,
-    lora_ids: Optional[List[str]]
+    lora_ids: Optional[str]
 ) -> Model:
     if dtype is None:
         # Keep it as default for now and let
@@ -338,7 +338,10 @@ def get_model(
 
     elif model_type == "llama" or model_type == "baichuan":
         if FLASHINFER_AVAILABLE:
-            return PunicaLM(model_id, lora_ids)
+            loraids = {}
+            for it in lora_ids.split(','):
+                loraids[it.split(':')[0]] = loraids[it.split(':')[1]]
+            return PunicaLM(model_id, loraids)
         elif FLASH_ATTENTION:
             return FlashLlama(
                 model_id,
