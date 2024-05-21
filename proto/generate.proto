@@ -139,6 +139,8 @@ message Request {
     bool prefill_logprobs = 6;
     /// Return most likely n tokens
     uint32 top_n_tokens = 7;
+    /// LoRA id
+    string lora_id = 8;
 }
 
 message Batch {

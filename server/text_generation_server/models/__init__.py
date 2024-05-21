@@ -339,8 +339,9 @@ def get_model(
     elif model_type == "llama" or model_type == "baichuan":
         if FLASHINFER_AVAILABLE:
             loraids = {}
-            for it in lora_ids.split(','):
-                loraids[it.split(':')[0]] = loraids[it.split(':')[1]]
+            if lora_ids:
+                for it in lora_ids.split(','):
+                    loraids[it.split(':')[0]] = loraids[it.split(':')[1]]
             return PunicaLM(model_id, loraids)
         elif FLASH_ATTENTION:
             return FlashLlama(
