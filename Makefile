@@ -13,7 +13,6 @@ codebase:
 	cp -r server build/
 	cp -r proto build/
 	cp -r router build/
-	python attach_rs.py
 	cd build/server && make gen-server
 
 install-server:
