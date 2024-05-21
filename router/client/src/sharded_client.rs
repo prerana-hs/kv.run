@@ -1,5 +1,5 @@
-mod kvr;
 use crate::client::{DecodeTimings, PrefillTimings};
+use crate::pb::generate::v2::AdapterControlResponse;
 /// Multi shard Client
 use crate::{Batch, CachedBatch, Client, Generation, HealthResponse, ShardInfo};
 use crate::{ClientError, Result};

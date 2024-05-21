@@ -1,4 +1,3 @@
-mod kvr;
 /// Single shard Client
 use crate::pb::generate::v2::text_generation_service_client::TextGenerationServiceClient;
 use crate::pb::generate::v2::*;
