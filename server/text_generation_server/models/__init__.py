@@ -342,7 +342,7 @@ def get_model(
             if lora_ids:
                 for it in lora_ids.split(','):
                     loraids[it.split(':')[0]] = loraids[it.split(':')[1]]
-            return PunicaLM(model_id, loraids)
+            return FlashinferLM(model_id, loraids)
         elif FLASH_ATTENTION:
             return FlashLlama(
                 model_id,
