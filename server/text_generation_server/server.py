@@ -235,7 +235,7 @@ def serve(
     dtype: Optional[str],
     trust_remote_code: bool,
     uds_path: Path,
-    lora_ids: Optional[List[str]]
+    lora_ids: Optional[str]
 ):
     async def serve_inner(
         model_id: str,

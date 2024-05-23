@@ -341,7 +341,7 @@ def get_model(
             loraids = {}
             if lora_ids:
                 for it in lora_ids.split(','):
-                    loraids[it.split(':')[0]] = loraids[it.split(':')[1]]
+                    loraids[it.split(':')[0]] = it.split(':')[1]
             return FlashinferLM(model_id, loraids)
         elif FLASH_ATTENTION:
             return FlashLlama(

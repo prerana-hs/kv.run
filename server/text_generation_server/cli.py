@@ -26,53 +26,6 @@ class Dtype(str, Enum):
     float16 = "float16"
     bloat16 = "bfloat16"
 
-
-@app.command()
-def serve_lora_adapters(
-    lora_ids: str = None,
-    sharded: bool = False,
-    logger_level: str = "INFO",
-    json_output: bool = False,
-    otlp_endpoint: Optional[str] = None,
-):
-    if sharded:
-        assert (
-            os.getenv("RANK", None) is not None
-        ), "RANK must be set when sharded is True"
-        assert (
-            os.getenv("WORLD_SIZE", None) is not None
-        ), "WORLD_SIZE must be set when sharded is True"
-        assert (
-            os.getenv("MASTER_ADDR", None) is not None
-        ), "MASTER_ADDR must be set when sharded is True"
-        assert (
-            os.getenv("MASTER_PORT", None) is not None
-        ), "MASTER_PORT must be set when sharded is True"
-
-    # Import here after the logger is added to log potential import exceptions
-    from text_generation_server import server
-    from text_generation_server.tracing import setup_tracing
-
-    # Setup OpenTelemetry distributed tracing
-    if otlp_endpoint is not None:
-        setup_tracing(shard=os.getenv("RANK", 0), otlp_endpoint=otlp_endpoint)
-
-    logger.remove()
-    logger.add(
-        sys.stdout,
-        format="{message}",
-        filter="text_generation_server",
-        level=logger_level,
-        serialize=json_output,
-        backtrace=True,
-        diagnose=False,
-    )
-
-    server.serve(
-    )
-
-
-
 @app.command()
 def serve(
     model_id: str,
@@ -88,8 +41,6 @@ def serve(
     json_output: bool = False,
     otlp_endpoint: Optional[str] = None,
 ):
-    if lora_ids:
-        lora_ids = lora_ids.split(',')
     if sharded:
         assert (
             os.getenv("RANK", None) is not None

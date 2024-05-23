@@ -143,17 +143,10 @@ class FlashinferBatch(CausalLMBatch):
         top_n_tokens = []
         prefix_offsets = []
         read_offsets = []
-        cls.lora_ids = []
 
         # Parse batch
         for i, r in enumerate(pb.requests):
-            try:
-                inputs = json.loads(r.inputs)
-                cls.lora_ids.append(inputs['lora_id'])
-                prompt = inputs['inputs']
-            except:
-                prompt = r.inputs
-                cls.lora_ids.append('empty')
+            prompt = r.inputs
 
             next_token_choosers.append(
                 NextTokenChooser.from_pb(r.parameters, device, tokenizer)
@@ -468,28 +461,28 @@ class FlashinferLM(Model):
         ids = []
         for r in range(len(batch.requests)):
             id = batch.requests[r].id
-            # todo: verify behavier
-            # if id not in self.reqctx:
-            lora_id = batch.lora_ids[r]
-            input = batch.input_ids[r]
-            parameters = batch.requests[r].parameters
-            stop = batch.requests[r].stopping_parameters
+            # Router sends initial request in each iteration
+            if id not in self.reqctx:
+                lora_id = batch.requests[r].lora_id or 'empty'
+                input = batch.input_ids[r]
+                parameters = batch.requests[r].parameters
+                stop = batch.requests[r].stopping_parameters
 
-            if lora_id not in self.lora_weights:
-                raise ValueError("Cannot find lora weights", lora_id)
+                if lora_id not in self.lora_weights:
+                    raise ValueError("Cannot find lora weights", lora_id)
 
-            self.reqctx[id] = RequestContext(
-                input,
-                lora_id,
-                self.tokenizer,
-                temperature=parameters.temperature,
-                repetition_penalty=parameters.repetition_penalty,
-                top_p=parameters.top_p,
-                top_k=parameters.top_k,
-                maxlen=min(stop.max_new_tokens, 4096),
-                stop_token_id=self.tokenizer.eos_token_id,
-            )
-            ids.append(id)
+                self.reqctx[id] = RequestContext(
+                    input,
+                    lora_id,
+                    self.tokenizer,
+                    temperature=parameters.temperature,
+                    repetition_penalty=parameters.repetition_penalty,
+                    top_p=parameters.top_p,
+                    top_k=parameters.top_k,
+                    maxlen=min(stop.max_new_tokens, 4096),
+                    stop_token_id=self.tokenizer.eos_token_id,
+                )
+                ids.append(id)
         return ids
 
     @tracer.start_as_current_span("generate_token")
@@ -554,6 +547,7 @@ class FlashinferLM(Model):
         decode_logits = raw_logits[prefillBatchPosition.total_seq_len:]
         logits = torch.cat([prefill_logits, decode_logits])
 
+        all_stop = True
         generations: List[Generation] = []
         for i, (reqid, reqctx) in enumerate(reqs):
             next_token_id = reqctx.get_next_token_id(logits[i].unsqueeze(0))
@@ -568,6 +562,7 @@ class FlashinferLM(Model):
                 batchKvCache.release(reqid)
             else:
                 generated_text = None
+                all_stop = False
 
             generation = Generation(
                 reqid, None,
@@ -583,4 +578,7 @@ class FlashinferLM(Model):
 
         forward_ns = start_decode - start
         decode_ns = time.time_ns() - start_decode
+        # The router stops generation only when batch=None
+        if all_stop:
+            batch = None
         return generations, batch, (forward_ns, decode_ns)
