@@ -41,18 +41,19 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
             ignore_eos_token=True))
     return request
 
-test = 'llama-3'
+test = 'gemma'
+#test = 'llama-3'
 #test = 'llama-2'
 
 if test == 'llama-2':
     # Load model
-    service = FlashinferLM(model_id="meta-llama/Llama-2-7b-hf",
+    service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
               lora_ids={'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})
     # Create an input batch of two queries
     requests = [make_input('llama2-gsm8k', 'base', id=0), make_input('llama2-gsm8k', 'lora', id=1)]
 elif test == 'llama-3':
     # Load model
-    service = FlashinferLM(model_id="tjluyao/llama-3-8b",
+    service = FlashinferLM(model_type="llama", model_id="tjluyao/llama-3-8b",
               lora_ids={'llama3-math':'tjluyao/llama-3-8b-math',
                         'llama3-zh': 'tjluyao/llama-3-8b-zh'})
     # Test load lora adapters
@@ -67,7 +68,9 @@ elif test == 'llama-3':
                                 'llama3-zh': 'tjluyao/llama-3-8b-zh'})
     # Create an input batch of two queries
     requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1)]
-
+elif test == "gemma":
+    requests = [make_input("llama2-gsm8k", "base", id=0), make_input("llama2-gsm8k", "base", id=1)]
+    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b")    
 
 print(service.get_lora_adapters())
 tokenizer = service.tokenizer
