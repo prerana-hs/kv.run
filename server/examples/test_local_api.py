@@ -70,7 +70,9 @@ elif test == 'llama-3':
     requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1)]
 elif test == "gemma":
     requests = [make_input("llama2-gsm8k", "base", id=0), make_input("llama2-gsm8k", "base", id=1)]
-    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b")    
+    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b")
+    # Quantized version
+    # service = FlashinferLM(model_type="gemma", model_id="TechxGenus/gemma-2b-GPTQ", quantize='gptq')
 
 print(service.get_lora_adapters())
 tokenizer = service.tokenizer

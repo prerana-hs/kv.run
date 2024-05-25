@@ -341,7 +341,7 @@ class FlashinferLM(Model):
                 model_id, revision=revision, trust_remote_code=trust_remote_code
             )
             
-            gemmaConfig.quantize = None
+            gemmaConfig.quantize = quantize
             gemmaConfig.use_medusa = False
 
             torch.distributed.barrier(group=process_group)
