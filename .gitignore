@@ -19,3 +19,4 @@ _build_meta.py
 .idea/
 lora_weights/
 .vscode/
+.venv

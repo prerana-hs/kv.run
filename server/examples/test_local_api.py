@@ -70,7 +70,9 @@ elif test == 'llama-3':
     requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1)]
 elif test == "gemma":    
     requests = [make_input("gemma-2b-math", "base", id=0), make_input("gemma-2b-math", "lora", id=1)]
-    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={'gemma-2b-math':'tjluyao/gemma-2b-math'})
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={'gemma-2b-math':'tjluyao/gemma-2b-math'})
+    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={"gemma-2b-math": "monsterapi/gemma-2b-lora-maths-orca-200k"})
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={})
     # Quantized version
     # service = FlashinferLM(model_type="gemma", model_id="TechxGenus/gemma-2b-GPTQ", quantize='gptq')
 
