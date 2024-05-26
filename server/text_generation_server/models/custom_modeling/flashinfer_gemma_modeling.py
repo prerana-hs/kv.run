@@ -309,8 +309,6 @@ class FlashGemmaAttention(nn.Module):
         self.num_kv_heads = (
             config.num_key_value_heads // weights.process_group.size()
         )
-        # self.num_groups = self.num_heads // self.num_key_value_heads
-
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
@@ -327,7 +325,8 @@ class FlashGemmaAttention(nn.Module):
         hidden_states: torch.Tensor,
         kvCachePool: KvCachePool, 
         prefillBatchPosition: KvCacheBatchPosition,
-        decodeBatchPosition: KvCacheBatchPosition
+        decodeBatchPosition: KvCacheBatchPosition,
+        lora: BatchedModelLoraWeight | None,
     ) -> torch.Tensor:
         qkv = self.qkv_proj(hidden_states)
         q_proj, k_proj, v_proj = qkv.split(
@@ -338,15 +337,48 @@ class FlashGemmaAttention(nn.Module):
             ],
             dim=1,
         )
+        
+        q_proj = q_proj.contiguous()
+        k_proj = k_proj.contiguous()
+        v_proj = v_proj.contiguous()
+
+        if lora:
+            add_lora(
+                q_proj,
+                hidden_states,
+                lora.q.wa_ptr,
+                lora.q.wb_ptr,
+                lora.segment,
+                self.layer_idx,
+                lora.rank,
+            )
+            add_lora(
+                k_proj,
+                hidden_states,
+                lora.k.wa_ptr,
+                lora.k.wb_ptr,
+                lora.segment,
+                self.layer_idx,
+                lora.rank,
+            )
+            add_lora(
+                v_proj,
+                hidden_states,
+                lora.v.wa_ptr,
+                lora.v.wb_ptr,
+                lora.segment,
+                self.layer_idx,
+                lora.rank,
+            )
 
         stack_attn_output = []
         workspace_buffer = torch.empty(32 * 1024 * 1024, dtype=torch.int8, device=kvCachePool.device)
         prefillTotalSeqLen = prefillBatchPosition.total_seq_len
         if prefillTotalSeqLen > 0:
             # need to revisit if contiguous conversion is the best way
-            q = q_proj[: prefillTotalSeqLen].view(prefillTotalSeqLen, self.num_qo_heads, self.head_dim).contiguous()
-            k = k_proj[: prefillTotalSeqLen].view(prefillTotalSeqLen, self.num_kv_heads, self.head_dim).contiguous()
-            v = v_proj[: prefillTotalSeqLen].view(prefillTotalSeqLen, self.num_kv_heads, self.head_dim).contiguous()
+            q = q_proj[: prefillTotalSeqLen].view(prefillTotalSeqLen, self.num_qo_heads, self.head_dim)
+            k = k_proj[: prefillTotalSeqLen].view(prefillTotalSeqLen, self.num_kv_heads, self.head_dim)
+            v = v_proj[: prefillTotalSeqLen].view(prefillTotalSeqLen, self.num_kv_heads, self.head_dim)
             
             seq_indptr = prefillBatchPosition.seq_indptr.clone()
             kv_page_indices = prefillBatchPosition.kv_page_indices.clone()
@@ -435,8 +467,9 @@ class FlashGemmaAttention(nn.Module):
 
 
 class GemmaMLP(nn.Module):
-    def __init__(self, prefix, config, weights):
+    def __init__(self, prefix, config, weights, layer_idx: int):
         super().__init__()
+        self.layer_idx = layer_idx
         act = config.hidden_act
         self.act = (
             ACT2FN[act]
@@ -466,10 +499,45 @@ class GemmaMLP(nn.Module):
             config.intermediate_size // weights.process_group.size()
         )
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor, lora: BatchedModelLoraWeight | None):
         gate_up_states = self.gate_up_proj(hidden_states)
         gate_up_states = gate_up_states.view(-1, 2, self.intermediate_size)
-        return self.down_proj(self.act(gate_up_states[:, 0]) * gate_up_states[:, 1])
+        gate = gate_up_states[:, 0].contiguous()
+        if lora:
+            add_lora(
+                gate,
+                hidden_states,
+                lora.gate.wa_ptr,
+                lora.gate.wb_ptr,
+                lora.segment,
+                self.layer_idx,
+                lora.rank,
+            )
+        gate = self.act(gate)
+        up = gate_up_states[:, 1].contiguous()
+        if lora:
+            add_lora(
+                up,
+                hidden_states,
+                lora.up.wa_ptr,
+                lora.up.wb_ptr,
+                lora.segment,
+                self.layer_idx,
+                lora.rank,
+            )       
+        t = gate * up
+        down = self.down_proj(t)
+        if lora:
+            add_lora(
+                down,
+                hidden_states,
+                lora.down.wa_ptr,
+                lora.down.wb_ptr,
+                lora.segment,
+                self.layer_idx,
+                lora.rank,
+            )        
+        return down
 
 class FlashGemmaLayer(nn.Module):
     def __init__(self, layer_id, config, weights):
@@ -478,7 +546,7 @@ class FlashGemmaLayer(nn.Module):
         self.self_attn = FlashGemmaAttention(
             prefix=f"{prefix}.self_attn", config=config, weights=weights, layer_idx=layer_id
         )
-        self.mlp = GemmaMLP(prefix=f"{prefix}.mlp", config=config, weights=weights)
+        self.mlp = GemmaMLP(prefix=f"{prefix}.mlp", config=config, weights=weights, layer_idx=layer_id)
 
         self.input_layernorm = GemmaRMSNorm(
             prefix=f"{prefix}.input_layernorm", weights=weights, eps=config.rms_norm_eps
@@ -495,21 +563,23 @@ class FlashGemmaLayer(nn.Module):
         residual: torch.Tensor,
         kvCachePool: KvCachePool, 
         prefillBatchPosition: KvCacheBatchPosition,
-        decodeBatchPosition: KvCacheBatchPosition
+        decodeBatchPosition: KvCacheBatchPosition,
+        lora: BatchedModelLoraWeight | None
     ):
         normed_hidden_states, res = self.input_layernorm(hidden_states, residual)
         attn_output = self.self_attn(
             normed_hidden_states,
             kvCachePool,
             prefillBatchPosition,
-            decodeBatchPosition
+            decodeBatchPosition,
+            lora
         )
 
         normed_attn_res_output, attn_res = self.post_attention_layernorm(
             attn_output, res
         )
 
-        mlp_output = self.mlp(normed_attn_res_output)
+        mlp_output = self.mlp(normed_attn_res_output, lora)
 
         return mlp_output, attn_res
 
@@ -552,7 +622,8 @@ class FlashGemmaModel(torch.nn.Module):
         input_ids: torch.Tensor,
         kvCachePool: KvCachePool, 
         prefillBatchPosition: KvCacheBatchPosition,
-        decodeBatchPosition: KvCacheBatchPosition
+        decodeBatchPosition: KvCacheBatchPosition,
+        lora: BatchedModelLoraWeight | None
     ) -> torch.Tensor:
         hidden_states = self.embed_tokens(input_ids)
         residual = None
@@ -562,7 +633,8 @@ class FlashGemmaModel(torch.nn.Module):
                 residual,
                 kvCachePool,
                 prefillBatchPosition,
-                decodeBatchPosition
+                decodeBatchPosition,
+                lora
             )
 
         hidden_states, _ = self.norm(hidden_states, residual)
@@ -587,13 +659,14 @@ class FlashGemmaForCausalLM(torch.nn.Module):
         kvCachePool: KvCachePool,
         prefillBatchPosition: KvCacheBatchPosition,
         decodeBatchPosition: KvCacheBatchPosition,
-        lora: BatchedModelLoraWeight = None,
+        lora: BatchedModelLoraWeight | None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         hidden_states = self.model(
             input_ids,
             kvCachePool,
             prefillBatchPosition,
-            decodeBatchPosition
+            decodeBatchPosition,
+            lora
         )
         logits, speculative_logits = self.lm_head(hidden_states)
         return logits, speculative_logits
