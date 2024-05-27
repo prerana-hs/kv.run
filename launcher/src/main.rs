@@ -418,10 +418,6 @@ struct Args {
     /// Control the maximum number of inputs that a client can send in a single request
     #[clap(default_value = "4", long, env)]
     max_client_batch_size: usize,
-
-    /// Specify LoRA adapters
-    #[clap(default_value = "empty", long, env)]
-    lora_ids: String,
 }
 
 #[derive(Debug)]
@@ -458,7 +454,6 @@ fn shard_manager(
     status_sender: mpsc::Sender<ShardStatus>,
     shutdown: Arc<AtomicBool>,
     _shutdown_sender: mpsc::Sender<()>,
-    lora_ids: String
 ) {
     // Enter shard-manager tracing span
     let _span = tracing::span!(tracing::Level::INFO, "shard-manager", rank = rank).entered();
@@ -524,12 +519,6 @@ fn shard_manager(
     if let Some(otlp_endpoint) = otlp_endpoint {
         shard_args.push("--otlp-endpoint".to_string());
         shard_args.push(otlp_endpoint);
-    }
-
-    // Model optional revision
-    if let loraids = lora_ids {
-        shard_args.push("--lora-ids".to_string());
-        shard_args.push(loraids)
     }
 
     // Copy current process env
@@ -1020,7 +1009,6 @@ fn spawn_shards(
         let rope_scaling = args.rope_scaling;
         let rope_factor = args.rope_factor;
         let max_batch_size = args.max_batch_size;
-        let lora_ids = args.lora_ids.clone();
         thread::spawn(move || {
             shard_manager(
                 model_id,
@@ -1049,7 +1037,6 @@ fn spawn_shards(
                 status_sender,
                 shutdown,
                 shutdown_sender,
-                lora_ids,
             )
         });
     }
@@ -1193,12 +1180,6 @@ fn spawn_webserver(
         router_args.push("--ngrok-edge".to_string());
         router_args.push(args.ngrok_edge.unwrap());
     }
-
-    // // LoRA adapters
-    // if let loraids = args.lora_ids {
-    //     router_args.push("--lora-ids".to_string());
-    //     router_args.push(loraids)
-    // }
 
     // Copy current process env
     let mut envs: Vec<(OsString, OsString)> = env::vars_os().collect();

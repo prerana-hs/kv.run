@@ -41,21 +41,20 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
             ignore_eos_token=True))
     return request
 
-# test = 'gemma'
-#test = 'llama-3'
+test = 'gemma'
+# test = 'llama-3'
 # test = 'llama-2'
-test = 'mistral'
 
 if test == 'llama-2':
     # Load model
     service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
-              lora_ids={'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})
+              lora_id_path_dict={'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})
     # Create an input batch of two queries
     requests = [make_input('llama2-gsm8k', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"), make_input('llama2-gsm8k', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
 elif test == 'llama-3':
     # Load model
     service = FlashinferLM(model_type="llama", model_id="tjluyao/llama-3-8b",
-              lora_ids={'llama3-math':'tjluyao/llama-3-8b-math',
+              lora_id_path_dict={'llama3-math':'tjluyao/llama-3-8b-math',
                         'llama3-zh': 'tjluyao/llama-3-8b-zh'})
     # Test load lora adapters
     print(service.get_lora_adapters())
@@ -69,12 +68,13 @@ elif test == 'llama-3':
                                 'llama3-zh': 'tjluyao/llama-3-8b-zh'})
     # Create an input batch of two queries
     requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1)]
-elif test == "gemma":
-    requests = [make_input("llama2-gsm8k", "base", id=0, promptOverride="why is deep learning so popular these days?"), make_input("llama2-gsm8k", "base", id=1)]
-    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b") 
-elif test == "mistral":
-    requests = [make_input("llama2-gsm8k", "base", id=0, promptOverride="why is deep learning so popular these days?"), make_input("llama2-gsm8k", "base", id=1, promptOverride="What can a Large Language Model do?")]
-    service = FlashinferLM(model_type="mistral", model_id="mistralai/Mistral-7B-v0.3")     
+elif test == "gemma":    
+    requests = [make_input("gemma-2b-it-math", "base", id=0), make_input("gemma-2b-it-math", "lora", id=1), make_input("gemma-2b-it-orca200k-math", "lora", id=2)]
+    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b-it", lora_id_path_dict={'gemma-2b-it-math': 'tjluyao/gemma-2b-math', 'gemma-2b-it-orca200k-math':'monsterapi/gemma-2b-lora-maths-orca-200k'})
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={'gemma-2b-math':'tjluyao/gemma-2b-math'})
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={})
+    # Quantized version
+    # service = FlashinferLM(model_type="gemma", model_id="TechxGenus/gemma-2b-GPTQ", quantize='gptq')
 
 print(service.get_lora_adapters())
 tokenizer = service.tokenizer

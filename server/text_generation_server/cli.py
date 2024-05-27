@@ -99,6 +99,38 @@ def serve(
         lora_ids
     )
 
+@app.command()
+def download_lora_adapter(
+    model_id: str,
+    logger_level: str = "INFO",
+    json_output: bool = False,
+):
+    # Remove default handler
+    logger.remove()
+    logger.add(
+        sys.stdout,
+        format="{message}",
+        filter="text_generation_server",
+        level=logger_level,
+        serialize=json_output,
+        backtrace=True,
+        diagnose=False,
+    )
+
+    # Import here after the logger is added to log potential import exceptions
+    from text_generation_server import utils
+
+    is_local_model = (Path(model_id).exists() and Path(model_id).is_dir()) or os.getenv(
+        "WEIGHTS_CACHE_OVERRIDE", None
+    ) is not None
+
+    if not is_local_model:
+        try:
+            adapter_model_filename = hf_hub_download(model_id, filename="adapter_model.safetensors")
+            adapter_model_filename = hf_hub_download(model_id, filename='adapter_config.json')
+            return
+        except (utils.LocalEntryNotFoundError, utils.EntryNotFoundError):
+            pass
 
 @app.command()
 def download_weights(
