@@ -158,12 +158,9 @@ class ModelLoraWeight:
         self.k.copy_from_tensor(ts["k.A"], ts["k.B"])
         self.v.copy_from_tensor(ts["v.A"], ts["v.B"])
         self.o.copy_from_tensor(ts["o.A"], ts["o.B"])
-        if ts.get("gate.A") is not None:
-            self.gate.copy_from_tensor(ts["gate.A"], ts["gate.B"])
-        if ts.get("up.A") is not None:
-            self.up.copy_from_tensor(ts["up.A"], ts["up.B"])
-        if ts.get("down.A") is not None:
-            self.down.copy_from_tensor(ts["down.A"], ts["down.B"])
+        self.gate.copy_from_tensor(ts["gate.A"], ts["gate.B"])
+        self.up.copy_from_tensor(ts["up.A"], ts["up.B"])
+        self.down.copy_from_tensor(ts["down.A"], ts["down.B"])
   
 class BatchedModelLoraWeight:
     def __init__(self, weights: List[ModelLoraWeight], lens: List[int]):
