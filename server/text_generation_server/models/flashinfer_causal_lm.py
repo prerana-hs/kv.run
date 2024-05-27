@@ -13,6 +13,7 @@ from .custom_modeling.flashinfer_gemma_modeling import (
     FlashGemmaForCausalLM,
     GemmaConfig,
 )
+from .custom_modeling.flashinfer_mistral_modeling import MistralConfig, FlashMistralForCausalLM
 from transformers import PreTrainedTokenizerBase
 import transformers
 from text_generation_server.pb import generate_pb2
@@ -297,6 +298,35 @@ class FlashinferLM(Model):
                 from_slow=False,
             )
             model.config = gemmaConfig
+        elif model_type == "mistral":
+            # local_model_dir_mistral = "/gpfsnyu/scratch/yy4108/kv.run/mistral/mistral_model"
+            # local_tokenizer_dir_mistral = "/gpfsnyu/scratch/yy4108/kv.run/mistral/mistral_model"
+            # local_config_dir_mistral = "/gpfsnyu/scratch/yy4108/kv.run/mistral/mistral_model"
+
+            process_group, rank, world_size = initialize_torch_distributed()
+            if torch.cuda.is_available():
+                device = torch.device(f"cuda:{rank}")
+                dtype = torch.bfloat16 if dtype is None else dtype
+            else:
+                raise NotImplementedError("FlashMistral is only available on GPU")
+
+            mistralConfig = MistralConfig.from_pretrained(
+                model_id, revision=revision, trust_remote_code=trust_remote_code
+            )
+            
+            mistralConfig.quantize = None
+            mistralConfig.use_medusa = False
+
+            torch.distributed.barrier(group=process_group)
+
+            filenames = weight_files(model_id, revision=revision, extension=".safetensors")
+            weights = Weights(filenames, device, dtype, process_group=process_group)
+            # if gemmaConfig.quantize in ["gptq", "awq"]:
+            #     weights._set_gptq_params(model_id, revision)
+
+            model = FlashMistralForCausalLM(None, mistralConfig, weights)
+            tokenizer = AutoTokenizer.from_pretrained(model_id)
+            model.config = mistralConfig
         else:
             raise NotImplementedError(f"Flashinfer is not implemented for: {model_type}")     
         
