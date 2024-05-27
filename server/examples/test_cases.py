@@ -53,11 +53,11 @@ class DemoSpec:
 DEMO = {}
 
 DEMO["llama3-math"] = DemoSpec(
-    weight_url="https://huggingface.co/tjluyao/llama-3-8b-zh/resolve/main/adapter_model.safetensors",
+    weight_url="https://huggingface.co/tjluyao/llama-3-8b-math/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
-    lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{question}\n",
-    base_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{examples}{question}\n",
-    example_template="<|start_header_id|>tool<|end_header_id|>\n{question}<|start_header_id|>{answer}<|end_header_id|>\n\n",
+    lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{question}<|eot_id|>",
+    base_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{examples}{question}<|eot_id|>",
+    example_template="<|start_header_id|>tool<|end_header_id|>\n{question}<|eot_id|><|start_header_id|>{answer}<|end_header_id|>\n\n",
     jsonl=r"""
 {"question": "If Juan takes 14 seconds to run y yards, how many seconds will it take him to run x yards at the same rate?\nAnswer Choices: (A) 14x/y (B) 14y/x (C) x/ (14y)  (D) 14/ (xy)  (E) xy/14","answer": "Let's solve the multi-choice question step by step.\nThis problem is testing us on the Rate x Time = Distance relationship. This relationship also tells us that Rate = Distance/Time and Time = Distance/Rate.\nUltimately, we are looking for how many seconds it will take Juan to run x yards. Thus, the equation we’ll use is: Time = Distance/Rate. We know the distance is x yards, and we need to find Juan’s rate.\nWe can find Juan’s rate as follows: Rate = Distance/Time = y yards/14 seconds\nUsing that rate, we need to determine how long it takes him to run x yards at the same rate. So we have:\nTime = Distance/Rate\nTime = x yards/(y yards/14 seconds)\nTime = (x yards) x (14 seconds/y yards)\nTime = 14x/y seconds\nThe answer is A."}
 {"question": "Find out the number of ways in which 6 rings of different types can be worn in 3 fingers?\nAnswer Choices: (A) 120 (B) 720 (C) 125 (D) 729 (E) None of these Please respond by writing a program in Python.","answer": "# The number of ways to arrange 6 rings on 3 fingers can be calculated using the formula for permutations with repetition: n^r, where n is the number of objects (rings) and r is the number of positions (fingers).\nnum_ways = 3**6\nprint(num_ways)"}
@@ -85,9 +85,9 @@ DEMO["llama3-math"] = DemoSpec(
 DEMO["llama3-zh"] = DemoSpec(
     weight_url="https://huggingface.co/tjluyao/llama-3-8b-zh/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
-    lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{question}\n",
-    base_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{examples}{question}\n",
-    example_template="<|start_header_id|>tool<|end_header_id|>\n{question}<|start_header_id|>{answer}<|end_header_id|>\n\n",
+    lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{question}<|eot_id|>",
+    base_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{examples}{question}<|eot_id|>",
+    example_template="<|start_header_id|>tool<|end_header_id|>\n{question}<|eot_id|><|start_header_id|>{answer}<|end_header_id|>\n\n",
     jsonl=r"""
 {"question": "列举三本由 J. K. Rowling 写的书籍。","answer": "J.K. Rowling 写的三本书分别为《哈利波特与魔法石》、《哈利波特与密室》和《哈利波特与死亡圣器》。"}
 {"question": "为豪华汽车经销商创建一个标志的设计。","answer": "所建议的标志设计包括红色、白色和黑色的配色方案，其中红色象征力量和权力，而黑色象征优雅与精致。标志本身由黑色皇冠和白色边框组成，中间是花体字母“L”，两侧是红色的抽象汽车，代表着这个豪华汽车经销商。"}
@@ -113,11 +113,11 @@ DEMO["llama3-zh"] = DemoSpec(
 )
 
 DEMO["llama3-oaast"] = DemoSpec(
-    weight_url="https://huggingface.co/tjluyao/llama-3-8b-zh/resolve/main/adapter_model.safetensors",
+    weight_url="https://huggingface.co/tjluyao/llama-3-8b-oaast/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
-    lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{question}\n",
-    base_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{examples}{question}\n",
-    example_template="<|start_header_id|>tool<|end_header_id|>\n{question}<|start_header_id|>{answer}<|end_header_id|>\n\n",
+    lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{question}<|eot_id|>",
+    base_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{examples}{question}<|eot_id|>",
+    example_template="<|start_header_id|>tool<|end_header_id|>\n{question}<|eot_id|><|start_header_id|>{answer}<|end_header_id|>\n\n",
     jsonl=r"""
 {"question": "Te compro lo del aceite de oliva, pero en cuanto al uso de la miel, según mi nutricionista es igual de perjudicial que el azúcar. ¿Qué otro ingrediente me puedes recomendar?","answer": "Podrías utilizar algún tipo de edulcorante el cual remplace la azúcar en su igual medida equivalente, aquí te paso algunas opciones de sustitutos para la azúcar:\n-Azúcar de coco -  Su contenido en fructosa es bajo (2-9%) y el contenido en minerales, relativamente alto.\n-Fructosa natural - Se caracteriza por endulzar más que el azúcar blanca o refinada, aportando solo cuatro calorías por gramo. \n-Sirope de arce - Este sirope, y otros como el de agave, sirve para endulzar infusiones y cafés, macedonias de frutas o diferentes postres lácteos como yogures y cuajadas.\n-Melaza de arroz - Se extrae de los granos de arroz redondo y sirve como endulzante natural con pocas calorías y un alto contenido en calcio (273 mg/100 g).\n-Azúcar de abedul o Xilitol - Su sabor en las infusiones, cafés, tés o zumos es igual y endulza lo mismo con una cantidad idéntica al clásico sobre de azúcar blanquilla procedente de caña o de remolacha.\n\nPuedes utilizar alguno de estos sustitutos, te recomendamos que busques el equivalente de cada uno de estos a las medidas de azúcar que necesitas para adaptar tu receta."}
 {"question": "como funciona una inteligencia artificial?","answer": "La inteligencia artificial es un campo de la informática que se centra en la creación de programas y sistemas que pueden realizar tareas que, normalmente, requerirían la inteligencia humana para llevarlas a cabo. Para ello, se utilizan técnicas como el aprendizaje automático, en el que se alimenta al sistema con grandes cantidades de datos y se ajustan los algoritmos para que puedan hacer predicciones o tomar decisiones basadas en esa información. En general, el objetivo de la inteligencia artificial es imitar la inteligencia humana en la medida de lo posible, aunque todavía hay muchos desafíos y limitaciones en este campo en la actualidad."}
@@ -218,12 +218,12 @@ DEMO["llama2-viggo"] = DemoSpec(
 """,
 )
 
-DEMO["gemma-2b-math"] = DemoSpec(
-    weight_url="https://huggingface.co/monsterapi/gemma-2b-lora-maths-orca-200k/blob/main/adapter_model.safetensors",
+DEMO["gemma-2b-it-math"] = DemoSpec(
+    weight_url="https://huggingface.co/tjluyao/gemma-2b-math/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
-    lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{question}\n",
-    base_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n{examples}{question}\n",
-    example_template="<|start_header_id|>tool<|end_header_id|>\n{question}<|start_header_id|>{answer}<|end_header_id|>\n\n",
+    lora_template="<bos>{system}\n<start_of_turn>{question}<end_of_turn>\n<start_of_turn>model\n",
+    base_template="<bos>{system}\n<start_of_turn>{question}<end_of_turn>\n{examples}\n<start_of_turn>model\n",
+    example_template="<start_of_turn>tool\n{question}<end_of_turn>\n<start_of_turn>model\n{answer}<end_of_turn>\n",
     jsonl=r"""
 {"question": "If Juan takes 14 seconds to run y yards, how many seconds will it take him to run x yards at the same rate?\nAnswer Choices: (A) 14x/y (B) 14y/x (C) x/ (14y)  (D) 14/ (xy)  (E) xy/14","answer": "Let's solve the multi-choice question step by step.\nThis problem is testing us on the Rate x Time = Distance relationship. This relationship also tells us that Rate = Distance/Time and Time = Distance/Rate.\nUltimately, we are looking for how many seconds it will take Juan to run x yards. Thus, the equation we’ll use is: Time = Distance/Rate. We know the distance is x yards, and we need to find Juan’s rate.\nWe can find Juan’s rate as follows: Rate = Distance/Time = y yards/14 seconds\nUsing that rate, we need to determine how long it takes him to run x yards at the same rate. So we have:\nTime = Distance/Rate\nTime = x yards/(y yards/14 seconds)\nTime = (x yards) x (14 seconds/y yards)\nTime = 14x/y seconds\nThe answer is A."}
 {"question": "Find out the number of ways in which 6 rings of different types can be worn in 3 fingers?\nAnswer Choices: (A) 120 (B) 720 (C) 125 (D) 729 (E) None of these Please respond by writing a program in Python.","answer": "# The number of ways to arrange 6 rings on 3 fingers can be calculated using the formula for permutations with repetition: n^r, where n is the number of objects (rings) and r is the number of positions (fingers).\nnum_ways = 3**6\nprint(num_ways)"}
