@@ -19,18 +19,6 @@ service TextGenerationService {
     rpc Decode (DecodeRequest) returns (DecodeResponse);
     /// Health check
     rpc Health (HealthRequest) returns (HealthResponse);
-    /// Model control
-    rpc AdapterControl(AdapterControlRequest) returns (AdapterControlResponse);
-}
-
-message AdapterControlRequest {
-    /// delimitered by comma
-    optional string lora_ids = 1;
-    string operation = 2;
-}
-
-message AdapterControlResponse {
-    string status = 1;
 }
 
 message HealthRequest {}

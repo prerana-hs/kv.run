@@ -20,7 +20,7 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
     else:
         raise ValueError(f"Unknown lora_or_base={lora_or_base}")
     prompt = random.choice(prompts) if not promptOverride else promptOverride
-    inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
+    inputs = prompt
 
     request = generate_pb2.Request(
         id=id,
@@ -38,12 +38,14 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
         stopping_parameters=generate_pb2.StoppingCriteriaParameters(
             max_new_tokens=2048,
             stop_sequences=[],
-            ignore_eos_token=True))
+            ignore_eos_token=True),
+        lora_id=lora_id
+    )
     return request
 
-test = 'gemma'
+# test = 'gemma'
 # test = 'llama-3'
-# test = 'llama-2'
+test = 'llama-2'
 # test = 'mistral'
 
 if test == 'llama-2':
@@ -68,7 +70,7 @@ elif test == 'llama-3':
                                 'llama3-oaast': 'tjluyao/llama-3-8b-oaast',
                                 'llama3-zh': 'tjluyao/llama-3-8b-zh'})
     # Create an input batch of two queries
-    requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1)]
+    requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1), make_input('llama3-zh', 'empty', id=2)]
 elif test == "gemma":    
     requests = [make_input("gemma-2b-it-math", "base", id=0), make_input("gemma-2b-it-math", "lora", id=1), make_input("gemma-2b-it-orca200k-math", "lora", id=2)]
     service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b-it", lora_id_path_dict={'gemma-2b-it-math': 'tjluyao/gemma-2b-math', 'gemma-2b-it-orca200k-math':'monsterapi/gemma-2b-lora-maths-orca-200k'})

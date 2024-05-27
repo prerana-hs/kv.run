@@ -69,7 +69,9 @@ class MultiLora:
             stopping_parameters=generate_pb2.StoppingCriteriaParameters(
                 max_new_tokens=2048,
                 stop_sequences=[],
-                ignore_eos_token=True))
+                ignore_eos_token=True),
+            lora_id=lora_id
+        )
         batch = generate_pb2.Batch(id = 0, requests = [request], size = 1)
         pb_batch = FlashinferBatch.from_pb(batch, self.tokenizer, torch.float16, torch.device("cuda"))
         self.model.add_request(pb_batch)

@@ -364,8 +364,8 @@ class FlashinferLM(Model):
             num_kv_heads = self.model_config.num_key_value_heads,
         )
         
-        self.loraManager = ModelLoraManager(self.model_config_for_lora, dtype, device)
-        self.loraManager.set_lora_weights(lora_id_path_dict, self.model_config_for_lora or {}, device, dtype)
+        self.loraManager = ModelLoraManager(self.model_config_for_lora, dtype)
+        self.loraManager.set_lora_weights(lora_id_path_dict, self.model_config_for_lora or {}, dtype)
         self.reqctx: dict[int, RequestContext] = {}
 
         super(FlashinferLM, self).__init__(
@@ -380,7 +380,6 @@ class FlashinferLM(Model):
         self.loraManager.set_lora_weights(
             lora_id_path_dict,
             self.model_config_for_lora,
-            device=self.device,
             dtype = self.dtype,
         )
 
@@ -388,7 +387,7 @@ class FlashinferLM(Model):
         self.loraManager.remove_lora_weights(lora_ids)
 
     def get_lora_adapters(self):
-        return list(self.loraManager.lora_weights)
+        return list(self.loraManager.lora_weights_cpu)
 
     def has_request(self):
         return len(self.reqctx)>0
@@ -413,7 +412,7 @@ class FlashinferLM(Model):
                 parameters = batch.requests[r].parameters
                 stop = batch.requests[r].stopping_parameters
 
-                if lora_id not in self.loraManager.lora_weights:
+                if lora_id not in self.loraManager.lora_weights_cpu:
                     raise ValueError("Cannot find lora weights", lora_id)
 
                 self.reqctx[id] = RequestContext(

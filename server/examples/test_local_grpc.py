@@ -21,7 +21,7 @@ def make_input(lora_id, lora_or_base):
     else:
         raise ValueError(f"Unknown lora_or_base={lora_or_base}")
     prompt = random.choice(prompts)
-    inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
+    inputs = prompt
 
     request = generate_pb2.Request(
         inputs=inputs,
@@ -38,7 +38,9 @@ def make_input(lora_id, lora_or_base):
         stopping_parameters=generate_pb2.StoppingCriteriaParameters(
             max_new_tokens=2048,
             stop_sequences=[],
-            ignore_eos_token=True))
+            ignore_eos_token=True),
+        lora_id=lora_id
+    )
     return request
 
 req1 = make_input('gsm8k', 'base')

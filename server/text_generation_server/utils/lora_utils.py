@@ -41,6 +41,11 @@ class LoraWeight:
             (num_layers, lora_rank, out_features), dtype=dtype, device=device
         )
 
+    def to_gpu(self):
+        # todo: multi-gpu
+        self.wa = self.wa.cuda()
+        self.wb = self.wb.cuda()
+
     def copy_from_tensor(self, a: torch.Tensor, b: torch.Tensor):
         """
         Copy from column-major weight tensors.
@@ -153,6 +158,15 @@ class ModelLoraWeight:
             device,
         )
 
+    def to_gpu(self):
+        self.q.to_gpu()
+        self.k.to_gpu()
+        self.v.to_gpu()
+        self.o.to_gpu()
+        self.gate.to_gpu()
+        self.up.to_gpu()
+        self.down.to_gpu()
+
     def copy_from_tensors(self, ts: dict[str, torch.Tensor]):
         self.q.copy_from_tensor(ts["q.A"], ts["q.B"])
         self.k.copy_from_tensor(ts["k.A"], ts["k.B"])
@@ -184,22 +198,22 @@ class BatchedModelLoraWeight:
         self.rank = weights[0].q.lora_rank
         
 class ModelLoraManager:
-    def __init__(self, model_config: ModelConfigForLora, dtype, device: torch.device):
-        self.lora_weights: Dict[str, ModelLoraWeight] = {}
+    def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap = 2):
+        self.lora_weights_gpu: Dict[str, ModelLoraWeight] = {}
+        self.lora_host: Dict[str, str] = {}
+        self.lora_cap = lora_cap + 1 # one for empty
         self.defalut_rank = 16
-        self.lora_weights["empty"] = ModelLoraWeight(
-                model_config, self.defalut_rank, dtype, device
-            )
+        self.lora_weights_cpu = {}
+        self.lora_weights_cpu["empty"] = ModelLoraWeight(model_config, self.defalut_rank, dtype, 'cpu')
         
     def set_lora_weights(
             self,
             lora_id_path_dict: Dict[str, str],
             model_config: ModelConfigForLora,
-            device: torch.device,
             dtype=torch.float16,
             ):
         for lora_id, lora_path in lora_id_path_dict.items():
-            if lora_id not in self.lora_weights:
+            if lora_id not in self.lora_weights_cpu:
                 try:
                     model_path = hf_hub_download(lora_path, filename='adapter_model.bin')
                 except:
@@ -208,28 +222,44 @@ class ModelLoraManager:
                     tmp = load_file(model_path, device="cpu")
                     model_path = model_path.replace('.safetensors', '.bin')
                     torch.save(tmp, model_path)
-                raw_weights = torch.load(model_path, map_location=device, weights_only=True)
+                raw_weights = torch.load(model_path, map_location='cpu', weights_only=True)
                 config_path = hf_hub_download(lora_path, filename='adapter_config.json')
                 lora_rank = peft.config.PeftConfigMixin.from_json_file(config_path)['r']
-                lora_weight = ModelLoraWeight(model_config, lora_rank*2, dtype, device) \
-                    if lora_rank < 16 \
-                    else ModelLoraWeight(model_config, lora_rank, dtype, device)
+                lora_weight = ModelLoraWeight(model_config, lora_rank*2, dtype, 'cpu') \
+                              if lora_rank < 16 \
+                              else ModelLoraWeight(model_config, lora_rank, dtype, 'cpu')
                 converted_weights = self.__convert_weight(raw_weights, lora_rank)
                 lora_weight.copy_from_tensors(converted_weights)
                 del converted_weights
-                self.lora_weights[lora_id] = lora_weight
-                logger.info(f'{lora_id} loaded!')
+                self.lora_weights_cpu[lora_id] = lora_weight
+                logger.info(f'{lora_id} loaded in cpu memory!')
+
                 
     def remove_lora_weights(self, lora_ids: List[str] = None):
         if (not lora_ids) or (lora_ids == '') or (lora_ids == 'all'):
-            lora_ids = list(self.lora_weights.keys())
+            lora_ids = list(self.lora_weights_gpu.keys())
         for lora_id in lora_ids:
-            if lora_id != 'empty' and lora_id in self.lora_weights:
-                del self.lora_weights[lora_id]
-                logger.info(f'{lora_id} removed!')
+            if lora_id != 'empty' and lora_id in self.lora_weights_gpu:
+                del self.lora_weights_gpu[lora_id]
+                logger.info(f'{lora_id} removed from gpu memory!')
                 
     def get_lora_batched_weights(self, lora_ids: List[str], lora_lens: List[int]) -> BatchedModelLoraWeight:
-        return BatchedModelLoraWeight([self.lora_weights[lora_id] for lora_id in lora_ids], lora_lens)
+        assert(len(lora_ids) <= self.lora_cap)
+        for lora_id in lora_ids:
+            assert(lora_id in self.lora_weights_cpu)
+        loraweights = []
+        for lora_id in lora_ids:
+            if lora_id not in self.lora_weights_gpu:
+                self.lora_weights_gpu[lora_id] = self.lora_weights_cpu[lora_id]
+                self.lora_weights_gpu[lora_id].to_gpu()
+        if len(self.lora_weights_gpu) > self.lora_cap:
+            # eviction policy : kick out the first adapter that is not in the current batch
+            # todo: use LRU to evict
+            candidate = list(set(list(self.lora_weights_gpu)) - set(lora_ids) - set(['empty']))
+            self.remove_lora_weights([candidate[0]])
+        for lora_id in lora_ids:
+            loraweights.append(self.lora_weights_gpu[lora_id])
+        return BatchedModelLoraWeight(loraweights, lora_lens)
                 
     def __convert_weight(self, weights, rank):
         qA, qB, kA, kB, vA, vB, oA, oB = [], [], [], [], [], [], [], []
