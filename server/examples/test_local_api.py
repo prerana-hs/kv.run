@@ -44,6 +44,7 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
 test = 'gemma'
 # test = 'llama-3'
 # test = 'llama-2'
+# test = 'mistral'
 
 if test == 'llama-2':
     # Load model
@@ -75,6 +76,9 @@ elif test == "gemma":
     # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={})
     # Quantized version
     # service = FlashinferLM(model_type="gemma", model_id="TechxGenus/gemma-2b-GPTQ", quantize='gptq')
+elif test == "mistral":
+    requests = [make_input("llama2-gsm8k", "base", id=0, promptOverride="why is deep learning so popular these days?"), make_input("llama2-gsm8k", "base", id=1, promptOverride="What are the differences between Manhattan and Brooklyn")]
+    service = FlashinferLM(model_type="mistral", model_id="mistralai/Mistral-7B-v0.3")   
 
 print(service.get_lora_adapters())
 tokenizer = service.tokenizer
