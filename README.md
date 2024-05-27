@@ -1,10 +1,22 @@
-# Pytorch-MIL
+# kv.run
 ```bash
 git submodule sync
 git submodule update --init
 ```
 
+Install proto
+```bash
+sudo apt-get install libssl-dev gcc -y
+PROTOC_ZIP=protoc-21.12-linux-x86_64.zip
+curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP
+sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
+sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
+rm -f $PROTOC_ZIP
+```
+
 ## To compile server code with kernels
+
+Make sure you compile/install FlashInfer first.
 
 ```bash
 make codebase
@@ -20,11 +32,13 @@ You can debug/edit code in the build folder. When done, use python copy_back.py 
 make install
 ```
 
-## To test Punica code
+## To test Punica Llama with APIs
 
 ```bash
-HF_HUB_ENABLE_HF_TRANSFER=1 pytest -s -vv --disable-pytest-warnings -m "punica_test" build/server/tests
+cd build/server
+python examples/test_local_api.py 
 ```
+
 
 # Single Device Multi-GPU Support
 

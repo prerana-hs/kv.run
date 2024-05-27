@@ -11,6 +11,9 @@ codebase:
 	cp -r third_party/text-generation-inference/server build/
 	cp third_party/text-generation-inference/Cargo*.* build/
 	cp -r server build/
+	cp -r proto build/
+	cp -r router build/
+	cd build/server && make gen-server
 
 install-server:
 	cd build/server && make install
@@ -29,3 +32,18 @@ install-benchmark:
 	cd build/benchmark && cargo install --path .
 
 install: codebase install-server install-router install-launcher install-custom-kernels
+
+rust-tests: install-router install-launcher
+	cargo test
+
+integration-tests: install-integration-tests
+	pytest -s -vv -m "not private" integration-tests
+
+update-integration-tests: install-integration-tests
+	pytest -s -vv --snapshot-update integration-tests
+	
+python-server-tests:
+	HF_HUB_ENABLE_HF_TRANSFER=1 pytest -s -vv -m "not private" build/server/tests
+
+python-client-tests:
+	pytest build/clients/python/tests

@@ -21,7 +21,7 @@ from text_generation_server.models.santacoder import SantaCoder
 from text_generation_server.models.t5 import T5Sharded
 from text_generation_server.models.gpt_neox import GPTNeoxSharded
 from text_generation_server.models.phi import Phi
-from text_generation_server.models.punica_causal_lm import PunicaLM
+from text_generation_server.models.flashinfer_causal_lm import FlashinferLM
 
 # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
 # in PyTorch 1.12 and later.
@@ -68,10 +68,13 @@ try:
         FlashSantacoderSharded,
     )
     from text_generation_server.models.idefics import IDEFICSSharded
+    from text_generation_server.models.llava_next import LlavaNext
+    from text_generation_server.models.idefics2 import Idefics2
     from text_generation_server.models.flash_mistral import FlashMistral
     from text_generation_server.models.flash_mixtral import FlashMixtral
     from text_generation_server.models.flash_phi import FlashPhi
     from text_generation_server.models.flash_starcoder2 import FlashStarcoder2
+    from text_generation_server.models.flash_dbrx import FlashDbrx
     from text_generation_server.utils.flash_attn import HAS_FLASH_ATTN_V2_CUDA
 
 except ImportError as e:
@@ -87,6 +90,7 @@ if FLASH_ATTENTION:
     __all__.append(IDEFICSSharded)
     __all__.append(FlashMistral)
     __all__.append(FlashMixtral)
+    __all__.append(FlashDbrx)
     __all__.append(FlashPhi)
     __all__.append(FlashQwen2)
     __all__.append(FlashStarcoder2)
@@ -118,6 +122,7 @@ def get_model(
     speculate: Optional[int],
     dtype: Optional[str],
     trust_remote_code: bool,
+    lora_ids: Optional[str]
 ) -> Model:
     if dtype is None:
         # Keep it as default for now and let
@@ -149,7 +154,7 @@ def get_model(
         if speculate is not None:
             if speculate > speculate_medusa:
                 raise RuntimeError(
-                    "Speculate is set to `{speculate}` but this medusa models only has `{speculate_medusa}` heads, please make them match"
+                    f"Speculate is set to `{speculate}` but this medusa models only has `{speculate_medusa}` heads, please make them match"
                 )
             else:
                 set_speculate(speculate)
@@ -191,6 +196,14 @@ def get_model(
             raise RuntimeError(
                 f"Could not determine model type for {model_id} revision {revision}"
             )
+    quantization_config = config_dict.get("quantization_config", None)
+    if quantization_config is not None and quantize is None:
+        method = quantization_config.get("quant_method", None)
+        if method in {"gptq", "awq"}:
+            logger.info(f"Auto selecting quantization method {method}")
+            quantize = method
+        else:
+            logger.info(f"Unknown quantization method {method}")
 
     if model_type == "ssm":
         return Mamba(
@@ -325,7 +338,11 @@ def get_model(
 
     elif model_type == "llama" or model_type == "baichuan":
         if FLASHINFER_AVAILABLE:
-            return PunicaLM('punica')
+            loraids = {}
+            if lora_ids:
+                for it in lora_ids.split(','):
+                    loraids[it.split(':')[0]] = it.split(':')[1]
+            return FlashinferLM(model_type, model_id, loraids)
         elif FLASH_ATTENTION:
             return FlashLlama(
                 model_id,
@@ -347,7 +364,13 @@ def get_model(
                 trust_remote_code=trust_remote_code,
             )
     if model_type == "gemma":
-        if FLASH_ATTENTION:
+        if FLASHINFER_AVAILABLE:
+            loraids = {}
+            if lora_ids:
+                for it in lora_ids.split(','):
+                    loraids[it.split(':')[0]] = it.split(':')[1]
+            return FlashinferLM(model_type, model_id, loraids)
+        elif FLASH_ATTENTION:
             return FlashGemma(
                 model_id,
                 revision,
@@ -380,6 +403,28 @@ def get_model(
             )
         elif sharded:
             raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Sharded Cohere"))
+        else:
+            return CausalLM(
+                model_id,
+                revision,
+                quantize=quantize,
+                use_medusa=use_medusa,
+                dtype=dtype,
+                trust_remote_code=trust_remote_code,
+            )
+
+    if model_type == "dbrx":
+        if FLASH_ATTENTION:
+            return FlashDbrx(
+                model_id,
+                revision,
+                quantize=quantize,
+                use_medusa=use_medusa,
+                dtype=dtype,
+                trust_remote_code=trust_remote_code,
+            )
+        elif sharded:
+            raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Sharded DBRX"))
         else:
             return CausalLM(
                 model_id,
@@ -555,6 +600,31 @@ def get_model(
             )
         else:
             raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Idefics"))
+    if model_type == "idefics2":
+        if FLASH_ATTENTION:
+            return Idefics2(
+                model_id,
+                revision,
+                quantize=quantize,
+                use_medusa=use_medusa,
+                dtype=dtype,
+                trust_remote_code=trust_remote_code,
+            )
+        else:
+            raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Idefics"))
+
+    if model_type == "llava_next":
+        if FLASH_ATTENTION:
+            return LlavaNext(
+                model_id,
+                revision,
+                quantize=quantize,
+                use_medusa=use_medusa,
+                dtype=dtype,
+                trust_remote_code=trust_remote_code,
+            )
+        else:
+            raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("LlavaNext"))
 
     if sharded:
         raise NotImplementedError("sharded is not supported for AutoModel")
