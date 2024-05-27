@@ -198,7 +198,7 @@ class BatchedModelLoraWeight:
         self.rank = weights[0].q.lora_rank
         
 class ModelLoraManager:
-    def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap = 2):
+    def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap = 32):
         self.lora_weights_gpu: Dict[str, ModelLoraWeight] = {}
         self.lora_host: Dict[str, str] = {}
         self.lora_cap = lora_cap + 1 # one for empty
