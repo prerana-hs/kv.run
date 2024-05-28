@@ -86,8 +86,8 @@ elif test == "gemma":
     # Quantized version
     # service = FlashinferLM(model_type="gemma", model_id="TechxGenus/gemma-2b-GPTQ", quantize='gptq')
 elif test == "mistral":
-    requests = [make_input("tjluyao/llama2-gsm8k", "base", id=0, promptOverride="why is deep learning so popular these days?"),
-                make_input("tjluyao/llama2-gsm8k", "base", id=1, promptOverride="What are the differences between Manhattan and Brooklyn")]
+    requests = [make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=0, promptOverride="why is deep learning so popular these days?"),
+                make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=1, promptOverride="What are the differences between Manhattan and Brooklyn")]
     service = FlashinferLM(model_type="mistral", model_id="mistralai/Mistral-7B-v0.3")   
 
 print(service.get_lora_adapters())

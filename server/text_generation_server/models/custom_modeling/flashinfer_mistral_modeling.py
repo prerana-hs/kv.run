@@ -72,6 +72,7 @@ class MistralConfig(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=1000000.0,
         sliding_window=None,
+        speculator=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -93,6 +94,7 @@ class MistralConfig(PretrainedConfig):
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.speculator = speculator
 
         super().__init__(
             pad_token_id=pad_token_id,
