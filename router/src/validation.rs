@@ -13,6 +13,7 @@ use thiserror::Error;
 use tokenizers::tokenizer::Tokenizer;
 // use tokenizers::TruncationDirection;
 use base64::{engine::general_purpose::STANDARD, Engine};
+use hf_hub::{Cache, Repo, RepoType};
 use image::{io::Reader as ImageReader, ImageFormat};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -383,13 +384,14 @@ impl Validation {
         let loraid = match lora_id {
             None => "empty".to_string(),
             Some(lid) => {
-                // if best_of > 1 {
-                //     return Err(BestOfSeed);
-                // }
-                lid
+                let cache = Cache::default();
+                let repo = cache.repo(Repo::model(lid.clone()));
+                match repo.get("adapter_model.bin") {
+                    Some(_) => { lid }
+                    None => return Err(ValidationError::LoRANotLoaded(lid))
+                }
             }
         };
-
 
         Ok(ValidGenerateRequest {
             inputs,
@@ -723,6 +725,8 @@ pub enum ValidationError {
     InvalidImageContent(String),
     #[error("Could not fetch image: {0}")]
     FailedFetchImage(#[from] reqwest::Error),
+    #[error("LoRA adaptor {0} not loaded")]
+    LoRANotLoaded(String)
 }
 
 #[cfg(test)]

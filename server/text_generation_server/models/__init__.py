@@ -577,10 +577,9 @@ def get_model(
 
     elif model_type == LLAMA or model_type == BAICHUAN or model_type == PHI3:
         if FLASHINFER_AVAILABLE:
-            loraids = {}
+            loraids = []
             if lora_ids:
-                for it in lora_ids.split(','):
-                    loraids[it.split(':')[0]] = it.split(':')[1]
+                loraids = lora_ids.split(';')
             return FlashinferLM(model_type, model_id, loraids)
         if FLASH_ATTENTION:
             return FlashLlama(

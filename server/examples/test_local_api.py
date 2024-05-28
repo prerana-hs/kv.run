@@ -51,15 +51,15 @@ test = 'gemma'
 if test == 'llama-2':
     # Load model
     service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
-                           lora_ids={'abcdabcd987/gsm8k-llama2-7b-lora-16'})
+                           lora_ids=['abcdabcd987/gsm8k-llama2-7b-lora-16'])
     # Create an input batch of two queries
     requests = [make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
                 make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
 elif test == 'llama-3':
     # Load model
     service = FlashinferLM(model_type="llama", model_id="tjluyao/llama-3-8b",
-              lora_ids={'tjluyao/llama-3-8b-math',
-                        'tjluyao/llama-3-8b-zh'})
+              lora_ids=['tjluyao/llama-3-8b-math',
+                        'tjluyao/llama-3-8b-zh'])
     # Test load lora adapters
     print(service.get_lora_adapters())
     # Test remove lora adapters
@@ -67,9 +67,9 @@ elif test == 'llama-3':
     print(service.get_lora_adapters())
     service.remove_lora_adapters()
     print(service.get_lora_adapters())
-    service.load_lora_adapters({'tjluyao/llama-3-8b-math',
+    service.load_lora_adapters(['tjluyao/llama-3-8b-math',
                                 'tjluyao/llama-3-8b-oaast',
-                                'tjluyao/llama-3-8b-zh'})
+                                'tjluyao/llama-3-8b-zh'])
     # Create an input batch of two queries
     requests = [make_input('tjluyao/llama-3-8b-zh', 'lora', id=0),
                 make_input('tjluyao/llama-3-8b-oaast', 'lora', id=1),
@@ -79,10 +79,10 @@ elif test == "gemma":
                 make_input("tjluyao/gemma-2b-it-math", "lora", id=1),
                 make_input("monsterapi/gemma-2b-lora-maths-orca-200k", "lora", id=2)]
     service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b-it",
-                           lora_ids={'tjluyao/gemma-2b-it-math',
-                                     'monsterapi/gemma-2b-lora-maths-orca-200k'})
-    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_ids={'gemma-2b-math':'tjluyao/gemma-2b-math'})
-    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_ids={})
+                           lora_ids=['tjluyao/gemma-2b-it-math',
+                                     'monsterapi/gemma-2b-lora-maths-orca-200k'])
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_ids=['tjluyao/gemma-2b-math'])
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_ids=[])
     # Quantized version
     # service = FlashinferLM(model_type="gemma", model_id="TechxGenus/gemma-2b-GPTQ", quantize='gptq')
 elif test == "mistral":

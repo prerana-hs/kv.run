@@ -169,13 +169,13 @@ if __name__ == '__main__':
 
     base_model = "meta-llama/Llama-2-7b-hf"
     model_type = "llama"
-    lora_ids = {'abcdabcd987/gsm8k-llama2-7b-lora-16',
+    lora_ids = ['abcdabcd987/gsm8k-llama2-7b-lora-16',
                 'abcdabcd987/sqlctx-llama2-7b-lora-16',
-                'abcdabcd987/viggo-llama2-7b-lora-16'}
+                'abcdabcd987/viggo-llama2-7b-lora-16']
     # base_model = "tjluyao/llama-3-8b"
-    # lora_ids = {'tjluyao/llama-3-8b-math',
+    # lora_ids = ['tjluyao/llama-3-8b-math',
     #             'tjluyao/llama-3-8b-oaast',
-    #             'tjluyao/llama-3-8b-zh'}
+    #             'tjluyao/llama-3-8b-zh']
 
     lora_specs = {}
     for name, spec in DEMO.items():

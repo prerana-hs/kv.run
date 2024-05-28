@@ -437,6 +437,10 @@ struct Args {
     /// Control the maximum number of inputs that a client can send in a single request
     #[clap(default_value = "4", long, env)]
     max_client_batch_size: usize,
+
+    /// Specify LoRA adapters
+    #[clap(default_value = "empty", long, env)]
+    lora_ids: String,
 }
 
 #[derive(Debug)]
@@ -474,6 +478,7 @@ fn shard_manager(
     status_sender: mpsc::Sender<ShardStatus>,
     shutdown: Arc<AtomicBool>,
     _shutdown_sender: mpsc::Sender<()>,
+    lora_ids: String
 ) {
     // Enter shard-manager tracing span
     let _span = tracing::span!(tracing::Level::INFO, "shard-manager", rank = rank).entered();
@@ -490,6 +495,8 @@ fn shard_manager(
     let mut shard_args = vec![
         "serve".to_string(),
         model_id,
+        "--lora-ids".to_string(),
+        lora_ids,
         "--uds-path".to_string(),
         uds_path,
         "--logger-level".to_string(),
@@ -991,6 +998,123 @@ fn download_convert_model(args: &Args, running: Arc<AtomicBool>) -> Result<(), L
     Ok(())
 }
 
+
+fn download_lora_adapters(args: &Args, running: Arc<AtomicBool>) -> Result<(), LauncherError> {
+    // Enter download tracing span
+    let _span = tracing::span!(tracing::Level::INFO, "download").entered();
+
+    let mut download_args = vec![
+        "download-lora-adapters".to_string(),
+        args.lora_ids.to_string(),
+    ];
+
+    // Copy current process env
+    let mut envs: Vec<(OsString, OsString)> = env::vars_os().collect();
+
+    // Remove LOG_LEVEL if present
+    envs.retain(|(name, _)| name != "LOG_LEVEL");
+
+    // Disable progress bar
+    envs.push(("HF_HUB_DISABLE_PROGRESS_BARS".into(), "1".into()));
+
+    // If huggingface_hub_cache is set, pass it to the download process
+    // Useful when running inside a docker container
+    if let Some(ref huggingface_hub_cache) = args.huggingface_hub_cache {
+        envs.push(("HUGGINGFACE_HUB_CACHE".into(), huggingface_hub_cache.into()));
+    };
+
+    // Enable hf transfer for insane download speeds
+    let enable_hf_transfer = env::var("HF_HUB_ENABLE_HF_TRANSFER").unwrap_or("1".to_string());
+    envs.push((
+        "HF_HUB_ENABLE_HF_TRANSFER".into(),
+        enable_hf_transfer.into(),
+    ));
+
+    // Parse Inference API token
+    if let Ok(api_token) = env::var("HF_API_TOKEN") {
+        envs.push(("HUGGING_FACE_HUB_TOKEN".into(), api_token.into()))
+    };
+
+    // If args.weights_cache_override is some, pass it to the download process
+    // Useful when running inside a HuggingFace Inference Endpoint
+    if let Some(weights_cache_override) = &args.weights_cache_override {
+        envs.push((
+            "WEIGHTS_CACHE_OVERRIDE".into(),
+            weights_cache_override.into(),
+        ));
+    };
+
+    // Start process
+    tracing::info!("Starting LoRA adapter download process.");
+    let mut download_process = match Command::new("text-generation-server")
+        .args(download_args)
+        .env_clear()
+        .envs(envs)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0)
+        .spawn()
+    {
+        Ok(p) => p,
+        Err(err) => {
+            if err.kind() == io::ErrorKind::NotFound {
+                tracing::error!("text-generation-server not found in PATH");
+                tracing::error!("Please install it with `make install-server`")
+            } else {
+                tracing::error!("{}", err);
+            }
+
+            return Err(LauncherError::DownloadError);
+        }
+    };
+
+    let download_stdout = BufReader::new(download_process.stdout.take().unwrap());
+
+    thread::spawn(move || {
+        log_lines(download_stdout.lines());
+    });
+
+    let download_stderr = BufReader::new(download_process.stderr.take().unwrap());
+
+    // We read stderr in another thread as it seems that lines() can block in some cases
+    let (err_sender, err_receiver) = mpsc::channel();
+    thread::spawn(move || {
+        for line in download_stderr.lines().map_while(Result::ok) {
+            err_sender.send(line).unwrap_or(());
+        }
+    });
+
+    loop {
+        if let Some(status) = download_process.try_wait().unwrap() {
+            if status.success() {
+                tracing::info!("Successfully downloaded weights.");
+                break;
+            }
+
+            let mut err = String::new();
+            while let Ok(line) = err_receiver.recv_timeout(Duration::from_millis(10)) {
+                err = err + "\n" + &line;
+            }
+
+            if let Some(signal) = status.signal() {
+                tracing::error!(
+                    "Download process was signaled to shutdown with signal {signal}: {err}"
+                );
+            } else {
+                tracing::error!("Download encountered an error: {err}");
+            }
+
+            return Err(LauncherError::DownloadError);
+        }
+        if !running.load(Ordering::SeqCst) {
+            terminate("download", download_process, Duration::from_secs(10)).unwrap();
+            return Ok(());
+        }
+        sleep(Duration::from_millis(100));
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_shards(
     num_shard: usize,
@@ -1030,6 +1154,7 @@ fn spawn_shards(
         let rope_scaling = args.rope_scaling;
         let rope_factor = args.rope_factor;
         let max_batch_size = args.max_batch_size;
+        let lora_ids = args.lora_ids.clone();
         thread::spawn(move || {
             shard_manager(
                 model_id,
@@ -1059,6 +1184,7 @@ fn spawn_shards(
                 status_sender,
                 shutdown,
                 shutdown_sender,
+                lora_ids,
             )
         });
     }
@@ -1503,6 +1629,9 @@ fn main() -> Result<(), LauncherError> {
 
     // Download and convert model weights
     download_convert_model(&args, running.clone())?;
+
+    // Download LoRA adapters
+    download_lora_adapters(&args, running.clone())?;
 
     if !running.load(Ordering::SeqCst) {
         // Launcher was asked to stop

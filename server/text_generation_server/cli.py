@@ -7,6 +7,7 @@ from loguru import logger
 from typing import Optional
 from enum import Enum
 from huggingface_hub import hf_hub_download
+from text_generation_server.utils.lora_utils import load_lora_weights
 
 
 app = typer.Typer()
@@ -101,8 +102,8 @@ def serve(
     )
 
 @app.command()
-def download_lora_adapter(
-    model_id: str,
+def download_lora_adapters(
+    lora_ids: str,
     logger_level: str = "INFO",
     json_output: bool = False,
 ):
@@ -117,21 +118,8 @@ def download_lora_adapter(
         backtrace=True,
         diagnose=False,
     )
-
-    # Import here after the logger is added to log potential import exceptions
-    from text_generation_server import utils
-
-    is_local_model = (Path(model_id).exists() and Path(model_id).is_dir()) or os.getenv(
-        "WEIGHTS_CACHE_OVERRIDE", None
-    ) is not None
-
-    if not is_local_model:
-        try:
-            adapter_model_filename = hf_hub_download(model_id, filename="adapter_model.safetensors")
-            adapter_model_filename = hf_hub_download(model_id, filename='adapter_config.json')
-            return
-        except (utils.LocalEntryNotFoundError, utils.EntryNotFoundError):
-            pass
+    for lora_id in lora_ids.split(';'):
+        load_lora_weights(lora_id)
 
 @app.command()
 def download_weights(

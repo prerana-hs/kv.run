@@ -1400,7 +1400,6 @@ pub async fn run(
     messages_api_enabled: bool,
     grammar_support: bool,
     max_client_batch_size: usize,
-    lora_ids: String
 ) -> Result<(), axum::BoxError> {
     // OpenAPI documentation
     #[derive(OpenApi)]
