@@ -252,7 +252,7 @@ class ModelLoraManager:
             if lora_id not in self.lora_weights_gpu:
                 self.lora_weights_gpu[lora_id] = self.lora_weights_cpu[lora_id]
                 self.lora_weights_gpu[lora_id].to_gpu()
-        if len(self.lora_weights_gpu) > self.lora_cap:
+        while len(self.lora_weights_gpu) > self.lora_cap:
             # eviction policy : kick out the first adapter that is not in the current batch
             # todo: use LRU to evict
             candidate = list(set(list(self.lora_weights_gpu)) - set(lora_ids) - set(['empty']))
