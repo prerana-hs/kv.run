@@ -13,7 +13,7 @@ from typing import Optional, List, Tuple
 from tokenizers import processors
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.utils import logging
-from text_generation_server.utils.layers import (
+from text_generation_server.layers import (
     TensorParallelRowLinear,
     TensorParallelColumnLinear,
     TensorParallelEmbedding,
@@ -214,6 +214,7 @@ class GemmaConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
+        speculator=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -237,6 +238,7 @@ class GemmaConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.speculator = speculator
 
         super().__init__(
             pad_token_id=pad_token_id,

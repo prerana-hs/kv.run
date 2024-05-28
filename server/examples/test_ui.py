@@ -26,13 +26,13 @@ warnings.filterwarnings(
 )
 
 class MultiLora:
-    def __init__(self, base_model, lora_ids, lora_specs: dict[str, LoraSpec]):
+    def __init__(self, base_model, model_type, lora_ids, lora_specs: dict[str, LoraSpec]):
         self.device = torch.device("cuda:0")
         self.lora_specs = lora_specs
         self.stop_signal = threading.Event()
         self.id = 1
         # Load base model
-        self.model = FlashinferLM(model_id=base_model, lora_ids=lora_ids)
+        self.model = FlashinferLM(model_type, base_model, lora_ids)
         self.tokenizer = self.model.tokenizer
 
         # Create text generation requests
@@ -167,6 +167,7 @@ if __name__ == '__main__':
     model_dir = project_root / "model"
 
     base_model = "meta-llama/Llama-2-7b-hf"
+    model_type = "llama"
     lora_ids = {'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16',
                 'llama2-sqlctx':'abcdabcd987/sqlctx-llama2-7b-lora-16',
                 'llama2-viggo':'abcdabcd987/viggo-llama2-7b-lora-16'}
@@ -181,7 +182,7 @@ if __name__ == '__main__':
             lora_prompts, base_prompts = spec.generate_prompts()
             lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
 
-    logic = MultiLora(base_model, lora_ids, lora_specs)
+    logic = MultiLora(base_model, model_type, lora_ids, lora_specs)
     tui = MultiLoraTui(list(lora_ids))
 
     def append_box(box_id, text):

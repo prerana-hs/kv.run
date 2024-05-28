@@ -234,6 +234,7 @@ class FlashinferLM(Model):
         lora_id_path_dict: Dict[str, str] = None,
         revision: Optional[str] = None,
         quantize: Optional[str] = None,
+        speculator: Optional[str] = None,
         use_medusa: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
         trust_remote_code: bool = False

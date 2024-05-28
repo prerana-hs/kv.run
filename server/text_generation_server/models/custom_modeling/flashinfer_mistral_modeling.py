@@ -31,15 +31,15 @@ from tokenizers import processors
 from transformers.utils import logging
 
 from text_generation_server.utils import paged_attention, flash_attn
-from text_generation_server.utils.layers import (
+from text_generation_server.layers import (
     TensorParallelRowLinear,
     TensorParallelColumnLinear,
     TensorParallelEmbedding,
-    PositionRotaryEmbedding,
     SpeculativeHead,
     get_linear,
-    FastRMSNorm,
 )
+from text_generation_server.layers.rotary import PositionRotaryEmbedding
+from text_generation_server.layers.layernorm import FastRMSNorm
 
 class FlashinferBatch:
     def __init__(self, seq_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len):
