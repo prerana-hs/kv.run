@@ -200,7 +200,6 @@ class BatchedModelLoraWeight:
 class ModelLoraManager:
     def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap = 32):
         self.lora_weights_gpu: Dict[str, ModelLoraWeight] = {}
-        self.lora_host: Dict[str, str] = {}
         self.lora_cap = lora_cap + 1 # one for empty
         self.defalut_rank = 16
         self.lora_weights_cpu = {}
@@ -208,22 +207,22 @@ class ModelLoraManager:
         
     def set_lora_weights(
             self,
-            lora_id_path_dict: Dict[str, str],
+            lora_ids: List[str],
             model_config: ModelConfigForLora,
             dtype=torch.float16,
             ):
-        for lora_id, lora_path in lora_id_path_dict.items():
+        for lora_id in lora_ids:
             if lora_id not in self.lora_weights_cpu:
                 try:
-                    model_path = hf_hub_download(lora_path, filename='adapter_model.bin')
+                    model_path = hf_hub_download(lora_id, filename='adapter_model.bin')
                 except:
                     from safetensors.torch import load_file
-                    model_path = hf_hub_download(lora_path, filename='adapter_model.safetensors')
+                    model_path = hf_hub_download(lora_id, filename='adapter_model.safetensors')
                     tmp = load_file(model_path, device="cpu")
                     model_path = model_path.replace('.safetensors', '.bin')
                     torch.save(tmp, model_path)
                 raw_weights = torch.load(model_path, map_location='cpu', weights_only=True)
-                config_path = hf_hub_download(lora_path, filename='adapter_config.json')
+                config_path = hf_hub_download(lora_id, filename='adapter_config.json')
                 lora_rank = peft.config.PeftConfigMixin.from_json_file(config_path)['r']
                 lora_weight = ModelLoraWeight(model_config, lora_rank*2, dtype, 'cpu') \
                               if lora_rank < 16 \

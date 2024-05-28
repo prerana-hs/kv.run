@@ -51,14 +51,15 @@ test = 'gemma'
 if test == 'llama-2':
     # Load model
     service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
-              lora_id_path_dict={'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16'})
+                           lora_ids={'abcdabcd987/gsm8k-llama2-7b-lora-16'})
     # Create an input batch of two queries
-    requests = [make_input('llama2-gsm8k', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"), make_input('llama2-gsm8k', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
+    requests = [make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
+                make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
 elif test == 'llama-3':
     # Load model
     service = FlashinferLM(model_type="llama", model_id="tjluyao/llama-3-8b",
-              lora_id_path_dict={'llama3-math':'tjluyao/llama-3-8b-math',
-                        'llama3-zh': 'tjluyao/llama-3-8b-zh'})
+              lora_ids={'tjluyao/llama-3-8b-math',
+                        'tjluyao/llama-3-8b-zh'})
     # Test load lora adapters
     print(service.get_lora_adapters())
     # Test remove lora adapters
@@ -66,20 +67,27 @@ elif test == 'llama-3':
     print(service.get_lora_adapters())
     service.remove_lora_adapters()
     print(service.get_lora_adapters())
-    service.load_lora_adapters({'llama3-math':'tjluyao/llama-3-8b-math',
-                                'llama3-oaast': 'tjluyao/llama-3-8b-oaast',
-                                'llama3-zh': 'tjluyao/llama-3-8b-zh'})
+    service.load_lora_adapters({'tjluyao/llama-3-8b-math',
+                                'tjluyao/llama-3-8b-oaast',
+                                'tjluyao/llama-3-8b-zh'})
     # Create an input batch of two queries
-    requests = [make_input('llama3-zh', 'lora', id=0), make_input('llama3-oaast', 'lora', id=1), make_input('llama3-zh', 'empty', id=2)]
+    requests = [make_input('tjluyao/llama-3-8b-zh', 'lora', id=0),
+                make_input('tjluyao/llama-3-8b-oaast', 'lora', id=1),
+                make_input('tjluyao/llama-3-8b-zh', 'empty', id=2)]
 elif test == "gemma":    
-    requests = [make_input("gemma-2b-it-math", "base", id=0), make_input("gemma-2b-it-math", "lora", id=1), make_input("gemma-2b-it-orca200k-math", "lora", id=2)]
-    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b-it", lora_id_path_dict={'gemma-2b-it-math': 'tjluyao/gemma-2b-math', 'gemma-2b-it-orca200k-math':'monsterapi/gemma-2b-lora-maths-orca-200k'})
-    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={'gemma-2b-math':'tjluyao/gemma-2b-math'})
-    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_id_path_dict={})
+    requests = [make_input("tjluyao/gemma-2b-it-math", "base", id=0),
+                make_input("tjluyao/gemma-2b-it-math", "lora", id=1),
+                make_input("monsterapi/gemma-2b-lora-maths-orca-200k", "lora", id=2)]
+    service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b-it",
+                           lora_ids={'tjluyao/gemma-2b-it-math',
+                                     'monsterapi/gemma-2b-lora-maths-orca-200k'})
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_ids={'gemma-2b-math':'tjluyao/gemma-2b-math'})
+    # service = FlashinferLM(model_type="gemma", model_id="google/gemma-2b", lora_ids={})
     # Quantized version
     # service = FlashinferLM(model_type="gemma", model_id="TechxGenus/gemma-2b-GPTQ", quantize='gptq')
 elif test == "mistral":
-    requests = [make_input("llama2-gsm8k", "base", id=0, promptOverride="why is deep learning so popular these days?"), make_input("llama2-gsm8k", "base", id=1, promptOverride="What are the differences between Manhattan and Brooklyn")]
+    requests = [make_input("tjluyao/llama2-gsm8k", "base", id=0, promptOverride="why is deep learning so popular these days?"),
+                make_input("tjluyao/llama2-gsm8k", "base", id=1, promptOverride="What are the differences between Manhattan and Brooklyn")]
     service = FlashinferLM(model_type="mistral", model_id="mistralai/Mistral-7B-v0.3")   
 
 print(service.get_lora_adapters())

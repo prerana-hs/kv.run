@@ -231,7 +231,7 @@ class FlashinferLM(Model):
         self,
         model_type: str,
         model_id: str = None,
-        lora_id_path_dict: Dict[str, str] = None,
+        lora_ids: List[str] = None,
         revision: Optional[str] = None,
         quantize: Optional[str] = None,
         speculator: Optional[str] = None,
@@ -396,7 +396,7 @@ class FlashinferLM(Model):
         )
         
         self.loraManager = ModelLoraManager(self.model_config_for_lora, dtype)
-        self.loraManager.set_lora_weights(lora_id_path_dict, self.model_config_for_lora or {}, dtype)
+        self.loraManager.set_lora_weights(lora_ids, self.model_config_for_lora or {}, dtype)
         self.reqctx: dict[int, RequestContext] = {}
 
         super(FlashinferLM, self).__init__(
@@ -407,9 +407,9 @@ class FlashinferLM(Model):
             device=device,
         )
 
-    def load_lora_adapters(self, lora_id_path_dict: Dict[str, str]):
+    def load_lora_adapters(self, lora_ids: List[str]):
         self.loraManager.set_lora_weights(
-            lora_id_path_dict,
+            lora_ids,
             self.model_config_for_lora,
             dtype = self.dtype,
         )
@@ -469,8 +469,8 @@ class FlashinferLM(Model):
 
         if hasattr(batch, 'requests') and batch.requests:
             ids = self.add_request(batch)
-            if ids:
-                print("====Request " + str(ids) + " added.")
+            # if ids:
+            #    print("====Request " + str(ids) + " added.")
 
         if not self.reqctx:
             return None, batch, (0, 0)

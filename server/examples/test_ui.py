@@ -137,7 +137,7 @@ class MultiLoraTui(App):
     class AppendBox(Message):
         def __init__(self, box_id: str, text: str):
             super().__init__()
-            self.box_id = box_id
+            self.box_id = box_id.replace('/', '--')
             self.text = text
 
     def __init__(self, model_names: list[str]):
@@ -148,6 +148,7 @@ class MultiLoraTui(App):
         yield Header()
         with Vertical():
             for model_name in self._model_names:
+                model_name = model_name.replace('/', '--')
                 with Horizontal():
                     box_lora = TailLog(id=f"{model_name}-lora", classes="box")
                     box_lora.border_title = f"{model_name}: LoRA finetuned model"
@@ -168,22 +169,22 @@ if __name__ == '__main__':
 
     base_model = "meta-llama/Llama-2-7b-hf"
     model_type = "llama"
-    lora_ids = {'llama2-gsm8k':'abcdabcd987/gsm8k-llama2-7b-lora-16',
-                'llama2-sqlctx':'abcdabcd987/sqlctx-llama2-7b-lora-16',
-                'llama2-viggo':'abcdabcd987/viggo-llama2-7b-lora-16'}
+    lora_ids = {'abcdabcd987/gsm8k-llama2-7b-lora-16',
+                'abcdabcd987/sqlctx-llama2-7b-lora-16',
+                'abcdabcd987/viggo-llama2-7b-lora-16'}
     # base_model = "tjluyao/llama-3-8b"
-    # lora_ids = {'llama3-math':'tjluyao/llama-3-8b-math',
-    #             'llama3-oaast': 'tjluyao/llama-3-8b-oaast',
-    #             'llama3-zh': 'tjluyao/llama-3-8b-zh'}
+    # lora_ids = {'tjluyao/llama-3-8b-math',
+    #             'tjluyao/llama-3-8b-oaast',
+    #             'tjluyao/llama-3-8b-zh'}
 
     lora_specs = {}
     for name, spec in DEMO.items():
-        if name in list(lora_ids):
+        if name in lora_ids:
             lora_prompts, base_prompts = spec.generate_prompts()
             lora_specs[name] = LoraSpec(lora_prompts, base_prompts)
 
     logic = MultiLora(base_model, model_type, lora_ids, lora_specs)
-    tui = MultiLoraTui(list(lora_ids))
+    tui = MultiLoraTui(lora_ids)
 
     def append_box(box_id, text):
         tui.post_message(MultiLoraTui.AppendBox(box_id, text))

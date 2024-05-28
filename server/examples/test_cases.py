@@ -52,7 +52,7 @@ class DemoSpec:
 
 DEMO = {}
 
-DEMO["llama3-math"] = DemoSpec(
+DEMO["tjluyao/llama-3-8b-math"] = DemoSpec(
     weight_url="https://huggingface.co/tjluyao/llama-3-8b-math/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
     lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{question}<|eot_id|>",
@@ -82,7 +82,7 @@ DEMO["llama3-math"] = DemoSpec(
 """,
 )
 
-DEMO["llama3-zh"] = DemoSpec(
+DEMO["tjluyao/llama-3-8b-zh"] = DemoSpec(
     weight_url="https://huggingface.co/tjluyao/llama-3-8b-zh/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
     lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{question}<|eot_id|>",
@@ -112,7 +112,7 @@ DEMO["llama3-zh"] = DemoSpec(
 """,
 )
 
-DEMO["llama3-oaast"] = DemoSpec(
+DEMO["tjluyao/llama-3-8b-oaast"] = DemoSpec(
     weight_url="https://huggingface.co/tjluyao/llama-3-8b-oaast/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
     lora_template="<|begin_of_text|><|start_header_id|>{system}<|end_header_id|>\n\n{question}<|eot_id|>",
@@ -143,7 +143,7 @@ DEMO["llama3-oaast"] = DemoSpec(
 )
 
 
-DEMO["llama2-gsm8k"] = DemoSpec(
+DEMO["abcdabcd987/gsm8k-llama2-7b-lora-16"] = DemoSpec(
     weight_url="https://huggingface.co/abcdabcd987/gsm8k-llama2-7b-lora-16/resolve/main/gsm8k-r16.punica.pt",
     system="Answer the following Grade School Math problem.",
     lora_template="<<SYS>>\n{system}\n<</SYS>>\n[INST] {question} [/INST]\n",
@@ -168,7 +168,7 @@ DEMO["llama2-gsm8k"] = DemoSpec(
 """,
 )
 
-DEMO["llama2-sqlctx"] = DemoSpec(
+DEMO["abcdabcd987/sqlctx-llama2-7b-lora-16"] = DemoSpec(
     weight_url="https://huggingface.co/abcdabcd987/sqlctx-llama2-7b-lora-16/resolve/main/sqlctx-r16.punica.pt",
     system="Generate a correct SQL query from the following database schema.",
     lora_template="<<SYS>>\n{system}\n{context}\n<</SYS>>\n[INST] {question} [/INST]\n",
@@ -193,7 +193,7 @@ DEMO["llama2-sqlctx"] = DemoSpec(
 """,
 )
 
-DEMO["llama2-viggo"] = DemoSpec(
+DEMO["abcdabcd987/viggo-llama2-7b-lora-16"] = DemoSpec(
     weight_url="https://huggingface.co/abcdabcd987/viggo-llama2-7b-lora-16/resolve/main/viggo-r16.punica.pt",
     system="Generate a description based on the following representation.",
     lora_template="<<SYS>>\n{system}\n<</SYS>>\n[INST] {meaning_representation} [/INST]\n",
@@ -218,8 +218,8 @@ DEMO["llama2-viggo"] = DemoSpec(
 """,
 )
 
-DEMO["gemma-2b-it-math"] = DemoSpec(
-    weight_url="https://huggingface.co/tjluyao/gemma-2b-math/resolve/main/adapter_model.safetensors",
+DEMO["tjluyao/gemma-2b-it-math"] = DemoSpec(
+    weight_url="https://huggingface.co/tjluyao/gemma-2b-it-math/resolve/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
     lora_template="<start_of_turn>user\n{question}<end_of_turn>\n<start_of_turn>model",
     base_template="<start_of_turn>user\n{question}<end_of_turn>\n<start_of_turn>model",
@@ -248,7 +248,7 @@ DEMO["gemma-2b-it-math"] = DemoSpec(
 """,
 )
 
-DEMO["gemma-2b-it-orca200k-math"] = DemoSpec(
+DEMO["monsterapi/gemma-2b-lora-maths-orca-200k"] = DemoSpec(
     weight_url="https://huggingface.co/monsterapi/gemma-2b-lora-maths-orca-200k/blob/main/adapter_model.safetensors",
     system="You are a helpful assistant.",
     lora_template="<start_of_turn>user\n{question}<end_of_turn>\n<start_of_turn>model",
