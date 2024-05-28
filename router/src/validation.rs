@@ -119,7 +119,11 @@ impl Validation {
         // If we have a fast tokenizer
         if let Some((encoding, inputs)) = self.tokenize(inputs.clone(), truncate).await? {
             // Create response channel
-            let input_length = encoding.len();
+            let input_length = if let Some(truncate) = truncate {
+                std::cmp::min(encoding.len(), truncate)
+            } else {
+                encoding.len()
+            };
 
             // Get total tokens
             let max_new_tokens: u32 = if let Some(max_new_tokens) = max_new_tokens {
@@ -530,6 +534,30 @@ fn prepare_input(
     static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"!\[\]\([^\)]*\)").unwrap());
     let tokenizer_query = match config {
         Some(Config::LlavaNext(config)) => {
+            let mut modified_inputs = String::with_capacity(inputs.len());
+            let mut tokenizer_query = String::with_capacity(inputs.len());
+            let mut start = 0;
+            for chunk in RE.find_iter(&inputs) {
+                let chunk_start = chunk.start();
+                let chunk_end = chunk.end();
+                if chunk_start != start {
+                    modified_inputs.push_str(&inputs[start..chunk_start]);
+                    tokenizer_query.push_str(&inputs[start..chunk_start]);
+                }
+                let (image_uri, height, width) = fetch_image(&inputs[chunk_start..chunk_end])?;
+                let slots = config.get_number_of_features(height, width);
+                tokenizer_query.push_str(&"<image>".repeat(slots));
+                modified_inputs.push_str(&image_uri);
+                start = chunk_end;
+            }
+            if start != inputs.len() - 1 {
+                modified_inputs.push_str(&inputs[start..]);
+                tokenizer_query.push_str(&inputs[start..]);
+            }
+            inputs = modified_inputs;
+            tokenizer_query
+        }
+        Some(Config::Paligemma(config)) => {
             let mut modified_inputs = String::with_capacity(inputs.len());
             let mut tokenizer_query = String::with_capacity(inputs.len());
             let mut start = 0;

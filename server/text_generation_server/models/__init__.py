@@ -1,9 +1,11 @@
 import torch
+import enum
+import os
 
 from loguru import logger
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import modeling_auto
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, HfApi
 from typing import Optional
 from pathlib import Path
 
@@ -51,6 +53,7 @@ FLASH_ATTENTION = True
 
 try:
     from text_generation_server.models.flash_rw import FlashRWSharded
+    from text_generation_server.models.flash_gpt2 import FlashGPT2
     from text_generation_server.models.flash_neox import FlashNeoXSharded
     from text_generation_server.models.flash_llama import (
         FlashLlama,
@@ -64,6 +67,9 @@ try:
     from text_generation_server.models.flash_gemma import (
         FlashGemma,
     )
+    from text_generation_server.models.pali_gemma import (
+        PaliGemma,
+    )
     from text_generation_server.models.flash_santacoder import (
         FlashSantacoderSharded,
     )
@@ -75,14 +81,18 @@ try:
     from text_generation_server.models.flash_phi import FlashPhi
     from text_generation_server.models.flash_starcoder2 import FlashStarcoder2
     from text_generation_server.models.flash_dbrx import FlashDbrx
-    from text_generation_server.utils.flash_attn import HAS_FLASH_ATTN_V2_CUDA
-
+    from text_generation_server.utils.flash_attn import (
+        HAS_FLASH_ATTN_V2_CUDA,
+        HAS_FLASH_ATTN_V2_ROCM,
+    )
 except ImportError as e:
     logger.warning(f"Could not import Flash Attention enabled models: {e}")
     FLASH_ATTENTION = False
     HAS_FLASH_ATTN_V2_CUDA = False
+    HAS_FLASH_ATTN_V2_ROCM = False
 
 if FLASH_ATTENTION:
+    __all__.append(FlashGPT2)
     __all__.append(FlashNeoXSharded)
     __all__.append(FlashRWSharded)
     __all__.append(FlashSantacoderSharded)
@@ -106,13 +116,149 @@ except ImportError as e:
 
 if MAMBA_AVAILABLE:
     __all__.append(Mamba)
-
+    
 FLASHINFER_AVAILABLE = True
 try:
     import flashinfer
 except ImportError as e:
     logger.warning(f"Could not import FlashInfer: {e}")
     FLASHINFER_AVAILABLE = False
+
+class ModelType(enum.Enum):
+    IDEFICS2 = {
+        "type": "idefics2",
+        "name": "Idefics 2",
+        "url": "https://huggingface.co/HuggingFaceM4/idefics2-8b",
+        "multimodal": True,
+    }
+    LLAVA_NEXT = {
+        "type": "llava_next",
+        "name": "Llava Next (1.6)",
+        "url": "https://huggingface.co/llava-hf/llava-v1.6-vicuna-13b-hf",
+        "multimodal": True,
+    }
+    LLAMA = {
+        "type": "llama",
+        "name": "Llama",
+        "url": "https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct",
+    }
+    PHI3 = {
+        "type": "phi3",
+        "name": "Phi 3",
+        "url": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct",
+    }
+    GEMMA = {
+        "type": "gemma",
+        "name": "Gemma",
+        "url": "https://huggingface.co/google/gemma-7b",
+    }
+    COHERE = {
+        "type": "cohere",
+        "name": "Cohere",
+        "url": "https://huggingface.co/CohereForAI/c4ai-command-r-plus",
+    }
+    DBRX = {
+        "type": "dbrx",
+        "name": "Dbrx",
+        "url": "https://huggingface.co/databricks/dbrx-instruct",
+    }
+    MAMBA = {
+        "type": "ssm",
+        "name": "Mamba",
+        "url": "https://huggingface.co/state-spaces/mamba-2.8b-slimpj",
+    }
+    MISTRAL = {
+        "type": "mistral",
+        "name": "Mistral",
+        "url": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2",
+    }
+    MIXTRAL = {
+        "type": "mixtral",
+        "name": "Mixtral",
+        "url": "https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1",
+    }
+    GPT_BIGCODE = {
+        "type": "gpt_bigcode",
+        "name": "Gpt Bigcode",
+        "url": "https://huggingface.co/bigcode/gpt_bigcode-santacoder",
+    }
+    PHI = {
+        "type": "phi",
+        "name": "Phi",
+        "url": "https://huggingface.co/microsoft/phi-1_5",
+    }
+    BAICHUAN = {
+        "type": "baichuan",
+        "name": "Baichuan",
+        "url": "https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat",
+    }
+    FALCON = {
+        "type": "falcon",
+        "name": "Falcon",
+        "url": "https://huggingface.co/tiiuae/falcon-7b-instruct",
+    }
+    STARCODER2 = {
+        "type": "starcoder2",
+        "name": "StarCoder 2",
+        "url": "https://huggingface.co/bigcode/starcoder2-15b-instruct-v0.1",
+    }
+    QWEN2 = {
+        "type": "qwen2",
+        "name": "Qwen 2",
+        "url": "https://huggingface.co/bigcode/starcoder2-15b-instruct-v0.1",
+    }
+    OPT = {
+        "type": "opt",
+        "name": "Opt",
+        "url": "https://huggingface.co/facebook/opt-6.7b",
+    }
+    T5 = {
+        "type": "t5",
+        "name": "T5",
+        "url": "https://huggingface.co/google/flan-t5-xxl",
+    }
+    GALACTICA = {
+        "type": "galactica",
+        "name": "Galactica",
+        "url": "https://huggingface.co/facebook/galactica-120b",
+    }
+    SANTACODER = {
+        "type": "santacoder",
+        "name": "SantaCoder",
+        "url": "https://huggingface.co/bigcode/santacoder",
+    }
+    BLOOM = {
+        "type": "bloom",
+        "name": "Bloom",
+        "url": "https://huggingface.co/bigscience/bloom-560m",
+    }
+    MPT = {
+        "type": "mpt",
+        "name": "Mpt",
+        "url": "https://huggingface.co/mosaicml/mpt-7b-instruct",
+    }
+    GPT2 = {
+        "type": "gpt2",
+        "name": "Gpt2",
+        "url": "https://huggingface.co/openai-community/gpt2",
+    }
+    GPT_NEOX = {
+        "type": "gpt_neox",
+        "name": "Gpt Neox",
+        "url": "https://huggingface.co/EleutherAI/gpt-neox-20b",
+    }
+    IDEFICS = {
+        "type": "idefics",
+        "name": "Idefics",
+        "url": "https://huggingface.co/HuggingFaceM4/idefics-9b",
+        "multimodal": True,
+    }
+
+
+__GLOBALS = locals()
+for data in ModelType:
+    __GLOBALS[data.name] = data.value["type"]
+
 
 def get_model(
     model_id: str,
@@ -143,8 +289,9 @@ def get_model(
     config_dict, _ = PretrainedConfig.get_config_dict(
         model_id, revision=revision, trust_remote_code=trust_remote_code
     )
+    model_type = config_dict.get("model_type", None)
 
-    use_medusa = None
+    speculator = None
     if "medusa_num_heads" in config_dict:
         medusa_model_id = model_id
         medusa_revision = revision
@@ -164,6 +311,8 @@ def get_model(
         config_dict, _ = PretrainedConfig.get_config_dict(
             model_id, revision=revision, trust_remote_code=trust_remote_code
         )
+        # Reload model type from parent.
+        model_type = config_dict.get("model_type", None)
         is_local = Path(medusa_model_id).exists()
         if not is_local:
             medusa_config = hf_hub_download(
@@ -174,11 +323,70 @@ def get_model(
                 revision=medusa_revision,
                 filename="medusa_lm_head.safetensors",
             )
-            use_medusa = Path(medusa_config).parent
+            speculator = {
+                "path": Path(medusa_config).parent,
+                "model_paths": ["medusa_lm_head.safetensors"],
+            }
         else:
-            use_medusa = Path(medusa_model_id)
+            speculator = {
+                "path": Path(medusa_model_id),
+                "model_paths": ["medusa_lm_head.safetensors"],
+            }
 
         method = "medusa"
+    elif model_type == "mlp_speculator":
+        mlp_model_id = model_id
+        mlp_revision = revision
+        model_id = config_dict["base_model_name_or_path"]
+        revision = "main"
+        speculate_mlp = config_dict["n_predict"]
+        if speculate is not None:
+            if speculate > speculate_mlp:
+                raise RuntimeError(
+                    f"Speculate is set to `{speculate}` but this mlp_speculator models only has `{speculate_mlp}` heads, please make them match"
+                )
+            else:
+                set_speculate(speculate)
+        else:
+            set_speculate(speculate_mlp)
+
+        config_dict, _ = PretrainedConfig.get_config_dict(
+            model_id, revision=revision, trust_remote_code=trust_remote_code
+        )
+        # Reload model type from parent.
+        model_type = config_dict.get("model_type", None)
+        is_local = Path(mlp_model_id).exists()
+        extension = ".safetensors"
+        if not is_local:
+            mlp_speculator_config = hf_hub_download(
+                mlp_model_id, revision=mlp_revision, filename="config.json"
+            )
+            api = HfApi()
+            info = api.model_info(mlp_model_id, revision=mlp_revision)
+            filenames = [
+                s.rfilename
+                for s in info.siblings
+                if s.rfilename.endswith(extension)
+                and len(s.rfilename.split("/")) == 1
+                and "arguments" not in s.rfilename
+                and "args" not in s.rfilename
+                and "training" not in s.rfilename
+            ]
+            for filename in filenames:
+                hf_hub_download(
+                    mlp_model_id,
+                    revision=mlp_revision,
+                    filename=filename,
+                )
+            speculator = {
+                "path": Path(mlp_speculator_config).parent,
+                "model_paths": filenames,
+            }
+        else:
+            speculator = Path(mlp_model_id)
+            filenames = [p for p in os.listdir(speculator) if p.endswith(extension)]
+            speculator = {"path": speculator, "model_paths": filenames}
+        method = "mlp_speculator"
     else:
         method = "n-gram"
 
@@ -186,7 +394,6 @@ def get_model(
     if speculate > 0:
         logger.info(f"Using speculation {method} with {speculate} input ids.")
 
-    model_type = config_dict.get("model_type", None)
     if model_type is None:
         # TODO: fix how we determine model type for Mamba
         if "ssm_cfg" in config_dict:
@@ -205,12 +412,12 @@ def get_model(
         else:
             logger.info(f"Unknown quantization method {method}")
 
-    if model_type == "ssm":
+    if model_type == MAMBA:
         return Mamba(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
@@ -220,14 +427,14 @@ def get_model(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
 
     if (
-        model_type == "gpt_bigcode"
-        or model_type == "gpt2"
+        model_type == GPT_BIGCODE
+        or model_type == GPT2
         and model_id.startswith("bigcode/")
     ):
         if FLASH_ATTENTION:
@@ -235,7 +442,7 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -248,37 +455,69 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type == "bloom":
+    if model_type == BLOOM:
         return BLOOMSharded(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
-    elif model_type == "mpt":
+    elif model_type == MPT:
         return MPTSharded(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
-
-    elif model_type == "gpt_neox":
+    elif model_type == GPT2:
+        if FLASH_ATTENTION:
+            try:
+                return FlashGPT2(
+                    model_id,
+                    revision,
+                    quantize=quantize,
+                    speculator=speculator,
+                    dtype=dtype,
+                    trust_remote_code=trust_remote_code,
+                )
+            except RuntimeError as e:
+                # Lots of legacy models with various weight names.
+                logger.warning(f"Couldn't load flash gpt2 variant: {e}")
+                return CausalLM(
+                    model_id,
+                    revision,
+                    quantize=quantize,
+                    speculator=speculator,
+                    dtype=dtype,
+                    trust_remote_code=trust_remote_code,
+                )
+        elif sharded:
+            raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Sharded GPT-2"))
+        else:
+            return CausalLM(
+                model_id,
+                revision,
+                quantize=quantize,
+                speculator=speculator,
+                dtype=dtype,
+                trust_remote_code=trust_remote_code,
+            )
+    elif model_type == GPT_NEOX:
         if FLASH_ATTENTION:
             return FlashNeoXSharded(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -287,7 +526,7 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -296,18 +535,18 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    elif model_type == "phi":
+    elif model_type == PHI:
         if FLASH_ATTENTION:
             return FlashPhi(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -316,7 +555,7 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -331,24 +570,24 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    elif model_type == "llama" or model_type == "baichuan":
+    elif model_type == LLAMA or model_type == BAICHUAN or model_type == PHI3:
         if FLASHINFER_AVAILABLE:
             loraids = {}
             if lora_ids:
                 for it in lora_ids.split(','):
                     loraids[it.split(':')[0]] = it.split(':')[1]
             return FlashinferLM(model_type, model_id, loraids)
-        elif FLASH_ATTENTION:
+        if FLASH_ATTENTION:
             return FlashLlama(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -359,23 +598,17 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
-    if model_type == "gemma":
-        if FLASHINFER_AVAILABLE:
-            loraids = {}
-            if lora_ids:
-                for it in lora_ids.split(','):
-                    loraids[it.split(':')[0]] = it.split(':')[1]
-            return FlashinferLM(model_type, model_id, loraids)
-        elif FLASH_ATTENTION:
+    if model_type == GEMMA:
+        if FLASH_ATTENTION:
             return FlashGemma(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -386,18 +619,18 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type == "cohere":
+    if model_type == COHERE:
         if FLASH_ATTENTION:
             return FlashCohere(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -408,18 +641,18 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type == "dbrx":
+    if model_type == DBRX:
         if FLASH_ATTENTION:
             return FlashDbrx(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -430,12 +663,12 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type in ["RefinedWeb", "RefinedWebModel", "falcon"]:
+    if model_type in ["RefinedWeb", "RefinedWebModel", FALCON]:
         if sharded:
             if FLASH_ATTENTION:
                 if config_dict.get("alibi", False):
@@ -444,7 +677,7 @@ def get_model(
                     model_id,
                     revision,
                     quantize=quantize,
-                    use_medusa=use_medusa,
+                    speculator=speculator,
                     dtype=dtype,
                     trust_remote_code=trust_remote_code,
                 )
@@ -455,7 +688,7 @@ def get_model(
                     model_id,
                     revision,
                     quantize=quantize,
-                    use_medusa=use_medusa,
+                    speculator=speculator,
                     dtype=dtype,
                     trust_remote_code=trust_remote_code,
                 )
@@ -464,21 +697,23 @@ def get_model(
                     model_id,
                     revision,
                     quantize=quantize,
-                    use_medusa=use_medusa,
+                    speculator=speculator,
                     dtype=dtype,
                     trust_remote_code=trust_remote_code,
                 )
 
-    if model_type == "mistral":
+    if model_type == MISTRAL:
         sliding_window = config_dict.get("sliding_window", -1)
         if (
-            (sliding_window is None or sliding_window == -1) and FLASH_ATTENTION
-        ) or HAS_FLASH_ATTN_V2_CUDA:
+            ((sliding_window is None or sliding_window == -1) and FLASH_ATTENTION)
+            or HAS_FLASH_ATTN_V2_CUDA
+            or HAS_FLASH_ATTN_V2_ROCM
+        ):
             return FlashMistral(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -489,21 +724,23 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type == "mixtral":
+    if model_type == MIXTRAL:
         sliding_window = config_dict.get("sliding_window", -1)
         if (
-            (sliding_window is None or sliding_window == -1) and FLASH_ATTENTION
-        ) or HAS_FLASH_ATTN_V2_CUDA:
+            ((sliding_window is None or sliding_window == -1) and FLASH_ATTENTION)
+            or HAS_FLASH_ATTN_V2_CUDA
+            or HAS_FLASH_ATTN_V2_ROCM
+        ):
             return FlashMixtral(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -514,16 +751,18 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type == "starcoder2":
+    if model_type == STARCODER2:
         sliding_window = config_dict.get("sliding_window", -1)
         if (
-            (sliding_window is None or sliding_window == -1) and FLASH_ATTENTION
-        ) or HAS_FLASH_ATTN_V2_CUDA:
+            ((sliding_window is None or sliding_window == -1) and FLASH_ATTENTION)
+            or HAS_FLASH_ATTN_V2_CUDA
+            or HAS_FLASH_ATTN_V2_ROCM
+        ):
             return FlashStarcoder2(
                 model_id,
                 revision,
@@ -540,16 +779,18 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type == "qwen2":
+    if model_type == QWEN2:
         sliding_window = config_dict.get("sliding_window", -1)
         if (
-            (sliding_window is None or sliding_window == -1) and FLASH_ATTENTION
-        ) or HAS_FLASH_ATTN_V2_CUDA:
+            ((sliding_window is None or sliding_window == -1) and FLASH_ATTENTION)
+            or HAS_FLASH_ATTN_V2_CUDA
+            or HAS_FLASH_ATTN_V2_ROCM
+        ):
             return FlashQwen2(
                 model_id,
                 revision,
@@ -564,62 +805,74 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
 
-    if model_type == "opt":
+    if model_type == OPT:
         return OPTSharded(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
 
-    if model_type == "t5":
+    if model_type == T5:
         return T5Sharded(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
-    if model_type == "idefics":
+    if model_type == IDEFICS:
         if FLASH_ATTENTION:
             return IDEFICSSharded(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
         else:
             raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Idefics"))
-    if model_type == "idefics2":
+    if model_type == IDEFICS2:
         if FLASH_ATTENTION:
             return Idefics2(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
+                dtype=dtype,
+                trust_remote_code=trust_remote_code,
+            )
+        else:
+            raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Idefics"))
+    if model_type == "paligemma":
+        if FLASH_ATTENTION:
+            return PaliGemma(
+                model_id,
+                revision,
+                quantize=quantize,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
         else:
             raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("Idefics"))
 
-    if model_type == "llava_next":
+    if model_type == LLAVA_NEXT:
         if FLASH_ATTENTION:
             return LlavaNext(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -643,7 +896,7 @@ def get_model(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
@@ -652,7 +905,7 @@ def get_model(
             model_id,
             revision,
             quantize=quantize,
-            use_medusa=use_medusa,
+            speculator=speculator,
             dtype=dtype,
             trust_remote_code=trust_remote_code,
         )
@@ -664,7 +917,7 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )
@@ -673,7 +926,7 @@ def get_model(
                 model_id,
                 revision,
                 quantize=quantize,
-                use_medusa=use_medusa,
+                speculator=speculator,
                 dtype=dtype,
                 trust_remote_code=trust_remote_code,
             )

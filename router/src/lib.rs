@@ -11,6 +11,7 @@ use queue::{Entry, Queue};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedSemaphorePermit;
 use tokio_stream::wrappers::UnboundedReceiverStream;
+use tracing::warn;
 use utoipa::ToSchema;
 use validation::Validation;
 
@@ -100,8 +101,8 @@ mod token_serde {
     use serde_json::Value;
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let value = Value::deserialize(deserializer)?;
 
@@ -159,6 +160,8 @@ pub struct Info {
     #[schema(example = "32")]
     pub max_client_batch_size: usize,
     /// Router Info
+    #[schema(example = "text-generation-router")]
+    pub router: &'static str,
     #[schema(example = "0.5.0")]
     pub version: &'static str,
     #[schema(nullable = true, example = "null")]
@@ -177,10 +180,10 @@ pub(crate) struct GenerateParameters {
     /// The value used to module the logits distribution.
     #[serde(default)]
     #[schema(
-    exclusive_minimum = 0.0,
-    nullable = true,
-    default = "null",
-    example = 0.5
+        exclusive_minimum = 0.0,
+        nullable = true,
+        default = "null",
+        example = 0.5
     )]
     pub temperature: Option<f32>,
 
@@ -188,10 +191,10 @@ pub(crate) struct GenerateParameters {
     /// See [this paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
     #[serde(default)]
     #[schema(
-    exclusive_minimum = 0.0,
-    nullable = true,
-    default = "null",
-    example = 1.03
+        exclusive_minimum = 0.0,
+        nullable = true,
+        default = "null",
+        example = 1.03
     )]
     pub repetition_penalty: Option<f32>,
 
@@ -200,10 +203,10 @@ pub(crate) struct GenerateParameters {
     /// decreasing the model's likelihood to repeat the same line verbatim.
     #[serde(default)]
     #[schema(
-    exclusive_minimum = -2.0,
-    nullable = true,
-    default = "null",
-    example = 0.1
+        exclusive_minimum = -2.0,
+        nullable = true,
+        default = "null",
+        example = 0.1
     )]
     pub frequency_penalty: Option<f32>,
 
@@ -215,11 +218,11 @@ pub(crate) struct GenerateParameters {
     /// Top-p value for nucleus sampling.
     #[serde(default)]
     #[schema(
-    exclusive_minimum = 0.0,
-    maximum = 1.0,
-    nullable = true,
-    default = "null",
-    example = 0.95
+        exclusive_minimum = 0.0,
+        maximum = 1.0,
+        nullable = true,
+        default = "null",
+        example = 0.95
     )]
     pub top_p: Option<f32>,
 
@@ -227,11 +230,11 @@ pub(crate) struct GenerateParameters {
     /// See [Typical Decoding for Natural Language Generation](https://arxiv.org/abs/2202.00666) for more information.
     #[serde(default)]
     #[schema(
-    exclusive_minimum = 0.0,
-    maximum = 1.0,
-    nullable = true,
-    default = "null",
-    example = 0.95
+        exclusive_minimum = 0.0,
+        maximum = 1.0,
+        nullable = true,
+        default = "null",
+        example = 0.95
     )]
     pub typical_p: Option<f32>,
 
@@ -278,10 +281,10 @@ pub(crate) struct GenerateParameters {
     /// Random sampling seed.
     #[serde(default)]
     #[schema(
-    exclusive_minimum = 0,
-    nullable = true,
-    default = "null",
-    example = "null"
+        exclusive_minimum = 0,
+        nullable = true,
+        default = "null",
+        example = "null"
     )]
     pub seed: Option<u64>,
 
@@ -334,8 +337,8 @@ mod prompt_serde {
     use serde_json::Value;
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let value = Value::deserialize(deserializer)?;
         match value {
@@ -406,6 +409,11 @@ pub struct CompletionRequest {
     #[schema(example = "1.0")]
     pub frequency_penalty: Option<f32>,
 
+    /// Up to 4 sequences where the API will stop generating further tokens.
+    #[serde(default)]
+    #[schema(nullable = true, example = "null")]
+    pub stop: Option<Vec<String>>,
+    
     /// LoRA id
     #[serde(default)]
     #[schema(nullable = true, default = "empty", example = "empty")]
@@ -449,7 +457,7 @@ pub(crate) struct ChatCompletion {
 #[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub(crate) struct ChatCompletionComplete {
     pub index: u32,
-    pub message: Message,
+    pub message: OutputMessage,
     pub logprobs: Option<ChatCompletionLogprobs>,
     pub finish_reason: String,
 }
@@ -542,6 +550,30 @@ impl ChatCompletion {
         return_logprobs: bool,
         tool_calls: Option<Vec<ToolCall>>,
     ) -> Self {
+        let message = match (output, tool_calls) {
+            (Some(content), None) => OutputMessage::ChatMessage(TextMessage {
+                role: "assistant".into(),
+                content,
+            }),
+            (None, Some(tool_calls)) => OutputMessage::ToolCall(ToolCallMessage {
+                role: "assistant".to_string(),
+                tool_calls,
+            }),
+            (Some(output), Some(_)) => {
+                warn!("Received both chat and tool call");
+                OutputMessage::ChatMessage(TextMessage {
+                    role: "assistant".into(),
+                    content: output,
+                })
+            }
+            (None, None) => {
+                warn!("Didn't receive an answer");
+                OutputMessage::ChatMessage(TextMessage {
+                    role: "assistant".into(),
+                    content: "".to_string(),
+                })
+            }
+        };
         Self {
             id: String::new(),
             object: "text_completion".into(),
@@ -550,12 +582,7 @@ impl ChatCompletion {
             system_fingerprint,
             choices: vec![ChatCompletionComplete {
                 index: 0,
-                message: Message {
-                    role: "assistant".into(),
-                    content: output,
-                    name: None,
-                    tool_calls,
-                },
+                message,
                 logprobs: return_logprobs
                     .then(|| ChatCompletionLogprobs::from((details.tokens, details.top_tokens))),
                 finish_reason: details.finish_reason.to_string(),
@@ -577,7 +604,8 @@ pub(crate) struct CompletionCompleteChunk {
     pub model: String,
     pub system_fingerprint: String,
 }
-#[derive(Clone, Deserialize, Serialize, ToSchema)]
+
+#[derive(Clone, Serialize, ToSchema)]
 pub(crate) struct ChatCompletionChunk {
     pub id: String,
     pub object: String,
@@ -589,7 +617,7 @@ pub(crate) struct ChatCompletionChunk {
     pub choices: Vec<ChatCompletionChoice>,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Serialize, ToSchema)]
 pub(crate) struct ChatCompletionChoice {
     pub index: u32,
     pub delta: ChatCompletionDelta,
@@ -597,21 +625,21 @@ pub(crate) struct ChatCompletionChoice {
     pub finish_reason: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
-pub(crate) struct ChatCompletionDelta {
-    #[schema(example = "user")]
-    // TODO Modify this to a true enum.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub role: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(example = "What is Deep Learning?")]
-    pub content: Option<String>,
-    // default to None
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<DeltaToolCall>,
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+pub struct ToolCallDelta {
+    #[schema(example = "assistant")]
+    role: String,
+    tool_calls: DeltaToolCall,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema, Debug)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+enum ChatCompletionDelta {
+    Chat(TextMessage),
+    Tool(ToolCallDelta),
+}
+
+#[derive(Clone, Deserialize, Serialize, ToSchema, Debug, PartialEq)]
 pub(crate) struct DeltaToolCall {
     pub index: u32,
     pub id: String,
@@ -619,7 +647,7 @@ pub(crate) struct DeltaToolCall {
     pub function: Function,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema, Debug)]
+#[derive(Clone, Deserialize, Serialize, ToSchema, Debug, PartialEq)]
 pub(crate) struct Function {
     pub name: Option<String>,
     pub arguments: String,
@@ -637,15 +665,13 @@ impl ChatCompletionChunk {
         finish_reason: Option<String>,
     ) -> Self {
         let delta = match (delta, tool_calls) {
-            (Some(delta), _) => ChatCompletionDelta {
-                role: Some("assistant".to_string()),
-                content: Some(delta),
-                tool_calls: None,
-            },
-            (None, Some(tool_calls)) => ChatCompletionDelta {
-                role: Some("assistant".to_string()),
-                content: None,
-                tool_calls: Some(DeltaToolCall {
+            (Some(delta), _) => ChatCompletionDelta::Chat(TextMessage {
+                role: "assistant".to_string(),
+                content: delta,
+            }),
+            (None, Some(tool_calls)) => ChatCompletionDelta::Tool(ToolCallDelta {
+                role: "assistant".to_string(),
+                tool_calls: DeltaToolCall {
                     index: 0,
                     id: String::new(),
                     r#type: "function".to_string(),
@@ -653,13 +679,12 @@ impl ChatCompletionChunk {
                         name: None,
                         arguments: tool_calls[0].to_string(),
                     },
-                }),
-            },
-            (None, None) => ChatCompletionDelta {
-                role: None,
-                content: None,
-                tool_calls: None,
-            },
+                },
+            }),
+            (None, None) => ChatCompletionDelta::Chat(TextMessage {
+                role: "assistant".to_string(),
+                content: "".to_string(),
+            }),
         };
         Self {
             id: String::new(),
@@ -766,8 +791,8 @@ pub(crate) struct ChatRequest {
     /// A prompt to be appended before the tools
     #[serde(default = "default_tool_prompt")]
     #[schema(
-    nullable = true,
-    example = "\"You will be presented with a JSON schema representing a set of tools.\nIf the user request lacks of sufficient information to make a precise tool selection: Do not invent any tool's properties, instead notify with an error message.\n\nJSON Schema:\n\""
+        nullable = true,
+        example = "\"You will be presented with a JSON schema representing a set of tools.\nIf the user request lacks of sufficient information to make a precise tool selection: Do not invent any tool's properties, instead notify with an error message.\n\nJSON Schema:\n\""
     )]
     pub tool_prompt: Option<String>,
 
@@ -802,8 +827,8 @@ mod deserialize_tool_choice {
     use serde_json::Value;
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<ToolType>, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let value = Value::deserialize(deserializer)?;
 
@@ -856,8 +881,8 @@ struct Properties {
 }
 
 fn serialize_function<S>(functions: &Vec<FunctionRef>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
+where
+    S: serde::Serializer,
 {
     use serde::ser::SerializeStruct;
     let mut state = serializer.serialize_struct("Function", 1)?;
@@ -865,7 +890,7 @@ fn serialize_function<S>(functions: &Vec<FunctionRef>, serializer: S) -> Result<
     state.end()
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ToSchema, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema, Default, PartialEq)]
 pub(crate) struct FunctionDefinition {
     #[serde(default)]
     pub description: Option<String>,
@@ -885,7 +910,7 @@ pub(crate) struct Tool {
 
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub(crate) struct ChatTemplateInputs<'a> {
-    messages: Vec<Message>,
+    messages: Vec<TextMessage>,
     bos_token: Option<&'a str>,
     eos_token: Option<&'a str>,
     add_generation_prompt: bool,
@@ -893,88 +918,113 @@ pub(crate) struct ChatTemplateInputs<'a> {
     tools_prompt: Option<&'a str>,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema, Default, Debug)]
+#[derive(Clone, Deserialize, Serialize, ToSchema, Default, Debug, PartialEq)]
 pub(crate) struct ToolCall {
-    pub id: u32,
+    pub id: String,
     pub r#type: String,
     pub function: FunctionDefinition,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema, Default, Debug)]
-pub(crate) struct Text {
-    #[serde(default)]
-    pub text: String,
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+struct Url {
+    url: String,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema, Default, Debug)]
-pub(crate) struct ImageUrl {
-    #[serde(default)]
-    pub url: String,
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+struct ImageUrl {
+    image_url: Url,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema, Default, Debug)]
-pub(crate) struct Content {
-    pub r#type: String,
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+struct Text {
+    text: String,
+}
+
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+enum MessageChunk {
+    Text(Text),
+    ImageUrl(ImageUrl),
+}
+
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+pub struct Message {
+    #[schema(example = "user")]
+    role: String,
+    #[schema(example = "My name is David and I")]
+    #[serde(deserialize_with = "message_content_serde::deserialize")]
+    content: Vec<MessageChunk>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image_url: Option<ImageUrl>,
+    #[schema(example = "\"David\"")]
+    name: Option<String>,
 }
 
 mod message_content_serde {
     use super::*;
-    use serde::de;
-    use serde::Deserializer;
-    use serde_json::Value;
+    use serde::{Deserialize, Deserializer};
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-        where
-            D: Deserializer<'de>,
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<MessageChunk>, D::Error>
+    where
+        D: Deserializer<'de>,
     {
-        let value = Value::deserialize(deserializer)?;
-        match value {
-            Value::String(s) => Ok(Some(s)),
-            Value::Array(arr) => {
-                let results: Result<Vec<String>, _> = arr
-                    .into_iter()
-                    .map(|v| {
-                        let content: Content =
-                            serde_json::from_value(v).map_err(de::Error::custom)?;
-                        match content.r#type.as_str() {
-                            "text" => Ok(content.text.unwrap_or_default()),
-                            "image_url" => {
-                                if let Some(url) = content.image_url {
-                                    Ok(format!("![]({})", url.url))
-                                } else {
-                                    Ok(String::new())
-                                }
-                            }
-                            _ => Err(de::Error::custom("invalid content type")),
-                        }
-                    })
-                    .collect();
-
-                results.map(|strings| Some(strings.join("")))
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Message {
+            Text(String),
+            Chunks(Vec<MessageChunk>),
+        }
+        let message: Message = Deserialize::deserialize(deserializer)?;
+        let chunks = match message {
+            Message::Text(text) => {
+                vec![MessageChunk::Text(Text { text })]
             }
-            Value::Null => Ok(None),
-            _ => Err(de::Error::custom("invalid token format")),
+            Message::Chunks(s) => s,
+        };
+        Ok(chunks)
+    }
+}
+
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+pub struct TextMessage {
+    #[schema(example = "user")]
+    pub role: String,
+    #[schema(example = "My name is David and I")]
+    pub content: String,
+}
+
+impl From<Message> for TextMessage {
+    fn from(value: Message) -> Self {
+        TextMessage {
+            role: value.role,
+            content: value
+                .content
+                .into_iter()
+                .map(|c| match c {
+                    MessageChunk::Text(Text { text }) => text,
+                    MessageChunk::ImageUrl(image) => {
+                        let url = image.image_url.url;
+                        format!("![]({url})")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(""),
         }
     }
 }
 
-#[derive(Clone, Deserialize, ToSchema, Serialize, Debug)]
-pub(crate) struct Message {
-    #[schema(example = "user")]
-    pub role: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(example = "My name is David and I")]
-    #[serde(deserialize_with = "message_content_serde::deserialize")]
-    pub content: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(example = "\"David\"")]
-    pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<ToolCall>>,
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+pub struct ToolCallMessage {
+    #[schema(example = "assistant")]
+    role: String,
+    tool_calls: Vec<ToolCall>,
+}
+
+#[derive(Clone, Deserialize, ToSchema, Serialize, Debug, PartialEq)]
+#[serde(untagged)]
+pub(crate) enum OutputMessage {
+    ChatMessage(TextMessage),
+    ToolCall(ToolCallMessage),
 }
 
 #[derive(Clone, Debug, Deserialize, ToSchema)]
@@ -1137,7 +1187,7 @@ pub(crate) struct ErrorResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use serde_json::json;
     use tokenizers::Tokenizer;
 
     pub(crate) async fn get_tokenizer() -> Tokenizer {
@@ -1204,5 +1254,101 @@ mod tests {
             Some("<｜begin▁of▁sentence｜>".to_string())
         );
         assert_eq!(config.eos_token, Some("<｜end▁of▁sentence｜>".to_string()));
+    }
+
+    #[test]
+    fn test_chat_simple_string() {
+        let json = json!({
+            "model": "",
+            "messages": [{
+                "role": "user",
+                "content": "What is Deep Learning?"
+            }]
+        });
+        let request: ChatRequest = serde_json::from_str(json.to_string().as_str()).unwrap();
+
+        assert_eq!(
+            request.messages[0],
+            Message {
+                role: "user".to_string(),
+                content: vec![MessageChunk::Text(Text {
+                    text: "What is Deep Learning?".to_string()
+                }),],
+                name: None
+            }
+        );
+    }
+
+    #[test]
+    fn test_chat_request() {
+        let json = json!({
+            "model": "",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Whats in this image?"},
+                    {"type": "image_url", "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png"}},
+                ]
+            }]
+        });
+        let request: ChatRequest = serde_json::from_str(json.to_string().as_str()).unwrap();
+
+        assert_eq!(
+            request.messages[0],
+            Message{
+                role: "user".to_string(),
+                content: vec![
+                    MessageChunk::Text(Text { text: "Whats in this image?".to_string() }),
+                    MessageChunk::ImageUrl(ImageUrl { image_url: Url { url: "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png".to_string() } })
+                ],
+                name: None
+            }
+        );
+    }
+
+    #[test]
+    fn text_message_convert() {
+        let message = Message{
+                role: "user".to_string(),
+                content: vec![
+                    MessageChunk::Text(Text { text: "Whats in this image?".to_string() }),
+                    MessageChunk::ImageUrl(ImageUrl { image_url: Url { url: "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png".to_string() } })
+                ],
+                name: None
+            };
+        let textmsg: TextMessage = message.into();
+        assert_eq!(textmsg.content, "Whats in this image?![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png)");
+    }
+    #[test]
+    fn openai_output() {
+        let message = OutputMessage::ChatMessage(TextMessage {
+            role: "assistant".to_string(),
+            content: "This is the answer".to_string(),
+        });
+        let serialized = serde_json::to_string(&message).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"role":"assistant","content":"This is the answer"}"#
+        );
+
+        let message = OutputMessage::ToolCall(ToolCallMessage {
+            role: "assistant".to_string(),
+            tool_calls: vec![ToolCall {
+                id: "0".to_string(),
+                r#type: "function".to_string(),
+                function: FunctionDefinition {
+                    description: None,
+                    name: "myfn".to_string(),
+                    arguments: json!({
+                        "format": "csv"
+                    }),
+                },
+            }],
+        });
+        let serialized = serde_json::to_string(&message).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"role":"assistant","tool_calls":[{"id":"0","type":"function","function":{"description":null,"name":"myfn","arguments":{"format":"csv"}}}]}"#
+        );
     }
 }

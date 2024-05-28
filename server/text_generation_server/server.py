@@ -14,10 +14,22 @@ from typing import List, Optional
 from text_generation_server.cache import Cache
 from text_generation_server.interceptor import ExceptionInterceptor
 from text_generation_server.models import Model, get_model
-from text_generation_server.models.vlm_causal_lm import VlmCausalLMBatch
+
+try:
+    from text_generation_server.models.pali_gemma import PaliGemmaBatch
+    from text_generation_server.models.vlm_causal_lm import (
+        VlmCausalLMBatch,
+    )
+    from text_generation_server.models.idefics_causal_lm import IdeficsCausalLMBatch
+
+    VLM_BATCH_TYPES = {PaliGemmaBatch, VlmCausalLMBatch, IdeficsCausalLMBatch}
+except (ImportError, NotImplementedError):
+    # These imports can fail on CPU/Non flash.
+    VLM_BATCH_TYPES = set()
+
 from text_generation_server.pb import generate_pb2_grpc, generate_pb2
 from text_generation_server.tracing import UDSOpenTelemetryAioServerInterceptor
-from text_generation_server.models.idefics_causal_lm import IdeficsCausalLMBatch
+from text_generation_server.models.globals import set_model_id
 
 
 class SignalHandler:
@@ -30,9 +42,6 @@ class SignalHandler:
     def exit_gracefully(self, signum, frame):
         print(f"Exiting gracefully: Signal {signum}")
         self.KEEP_PROCESSING = False
-
-
-signal_handler = SignalHandler()
 
 
 class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
@@ -85,7 +94,7 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
                 # When using GPTQ, Exllama kernels need some global kernels
                 # For which we have the finale shapes only after the model has loaded
                 # This will allocate those buffers.
-                from text_generation_server.utils.layers import (
+                from text_generation_server.layers.gptq import (
                     create_exllama_buffers,
                     set_device,
                 )
@@ -95,10 +104,9 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
             except ImportError:
                 pass
 
-        if self.model.batch_type in {
-            IdeficsCausalLMBatch,
-            VlmCausalLMBatch,
-        }:  # Hack, i would rather use kwargs in the `from_pb` call
+        if (
+            self.model.batch_type in VLM_BATCH_TYPES
+        ):  # Hack, i would rather use kwargs in the `from_pb` call
             batch = self.model.batch_type.from_pb_processor(
                 request.batch,
                 self.model.tokenizer,
@@ -119,10 +127,9 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
 
     async def Prefill(self, request, context):
         start = time.time_ns()
-        if self.model.batch_type in {
-            IdeficsCausalLMBatch,
-            VlmCausalLMBatch,
-        }:  # Hack, i would rather use kwargs in the `from_pb` call
+        if (
+            self.model.batch_type in VLM_BATCH_TYPES
+        ):  # Hack, i would rather use kwargs in the `from_pb` call
             batch = self.model.batch_type.from_pb_processor(
                 request.batch,
                 self.model.tokenizer,
@@ -181,6 +188,7 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
             decode_ns=timings[1],
             total_ns=time.time_ns() - start,
         )
+
 
 def serve(
     model_id: str,
@@ -247,10 +255,11 @@ def serve(
         await server.start()
 
         logger.info("Server started at {}".format(local_url))
-
+        signal_handler = SignalHandler()
         while signal_handler.KEEP_PROCESSING:
             await asyncio.sleep(0.5)
 
+    set_model_id(model_id)
     asyncio.run(
         serve_inner(
             model_id, revision, sharded, quantize, speculate, dtype, trust_remote_code
