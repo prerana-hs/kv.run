@@ -13,6 +13,7 @@ codebase:
 	cp -r server build/
 	cp -r proto build/
 	cp -r router build/
+	cp -r launcher build/
 	cd build/server && make gen-server
 
 install-server:

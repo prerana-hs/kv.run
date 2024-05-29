@@ -580,7 +580,12 @@ def get_model(
             loraids = []
             if lora_ids:
                 loraids = lora_ids.split(';')
-            return FlashinferLM(model_type, model_id, loraids)
+            return FlashinferLM(
+                model_type,
+                model_id,
+                loraids,
+                quantize=quantize,
+                dtype=dtype,)
         if FLASH_ATTENTION:
             return FlashLlama(
                 model_id,
