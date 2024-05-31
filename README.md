@@ -56,6 +56,11 @@ You can debug/edit code in the build folder. When done, use python copy_back.py 
 ```shell
 cd build/server/examples & python test_local_api.py
 ```
+#### Local UI demo
+(Inherited from [Punica](https://github.com/punica-ai/punica))
+https://github.com/mlsys-io/kv.run/assets/12567967/d9d09ce6-d84f-4eb6-8355-951ecaeabbf2
+
+
 #### Deploy services
 ```shell
 text-generation-launcher --model-id tjluyao/llama-3-8b --lora-ids tjluyao/llama-3-8b-math;tjluyao/llama-3-8b-zh
