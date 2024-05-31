@@ -58,8 +58,7 @@ cd build/server/examples & python test_local_api.py
 ```
 #### Local UI demo
 (Inherited from [Punica](https://github.com/punica-ai/punica))
-https://github.com/mlsys-io/kv.run/assets/12567967/d9d09ce6-d84f-4eb6-8355-951ecaeabbf2
-
+[demo.mp4](https://github.com/mlsys-io/kv.run/assets/12567967/977b09fb-bd90-4757-85ab-e5fc2a58cd93)
 
 #### Deploy services
 ```shell
