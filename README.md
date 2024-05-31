@@ -60,16 +60,24 @@ cd build/server/examples & python test_local_api.py
 ```shell
 text-generation-launcher --model-id tjluyao/llama-3-8b --lora-ids tjluyao/llama-3-8b-math;tjluyao/llama-3-8b-zh
 ```
-#### Using quantization
+#### Using quantized models
 Add --quantize [Method] to the command above, for example:
 ```shell
 text-generation-launcher --model-id TechxGenus/gemma-2b-GPTQ --lora-ids tjluyao/gemma-2b-it-math --quantize gptq
 ```
 The supported quantization methods include: 
 - AWQ: 4-bit. Need specific quantized model. 
-- EETQ: 8-bit. Can work for any model.
+- EETQ: 8-bit. Can work for any model. 
 - GPTQ: 4-bit. Need specific quantized model.
 - Bitandbytes: 8-bit. Can work for any model.
+
+For AWQ and EETQ quantization, you need to build their specific kernels: 
+```shell
+# AWQ
+cd build/server & make install-awq
+# EETQ
+cd build/server & make install-eetq
+```
 
 ## Model support matrix
 Note: L = Language, I = Image
