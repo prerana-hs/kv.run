@@ -263,7 +263,6 @@ class FlashinferLM(Model):
                 torch_dtype=dtype,
                 low_cpu_mem_usage=True,
                 device_map=device,
-                load_in_8bit=quantize == "bitsandbytes",
                 trust_remote_code=trust_remote_code,
             )
         elif model_type == "gemma":

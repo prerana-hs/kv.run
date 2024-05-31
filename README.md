@@ -1,7 +1,7 @@
 # kv.run
 (Limited) comparison of popular model serving solutions
 
-| Solution        | Inference backend | Server backend       | Advanced kernel support                                                                          | Model support              |  
+| Solution        | Inference backend | Serving backend      | Advanced kernel support                                                                          | Model support              |  
 |-----------------|-------------------|----------------------|--------------------------------------------------------------------------------------------------|----------------------------|
 | Huggingface TGI | Pytorch           | HF TGI (Rust)        | Paged + Flash attention                                                                          | Language                   | 
 | Deepspeed MII   | PyTorch           | Deepspeed (Python)   | [DeepSpeed-Kernels](https://github.com/microsoft/DeepSpeed-Kernels)                              | Language                   |
@@ -12,18 +12,18 @@
  
 
 ## Installation
-### Sync submodules
+#### Sync submodules
 ```shell
 git submodule sync
 git submodule update --init
 ```
 
-### Install Rust
+#### Install Rust
 [Script](https://rustup.rs/):
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-### Install proto
+#### Install Protobuf
 ```shell
 sudo apt-get install libssl-dev gcc -y
 PROTOC_ZIP=protoc-21.12-linux-x86_64.zip
@@ -33,24 +33,46 @@ sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
 ```
 
-### Build Code Base
+#### Build Code Base
 ```shell
 make install
 ```
 
-### Install Kernel Libraries
+#### Install Kernel Libraries
 ```shell
 # Install FlashInfer
 # For CUDA 12.1 & torch 2.3
 pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3
 # For other CUDA & torch versions, please check https://docs.flashinfer.ai/installation.html
 
-# Install Flash Attention
-cd build & make install-flash-attention
+# Install Flash and Paged Attention
+cd build/server 
+make install-flash-attention & make install-vllm-cuda
 ```
 You can debug/edit code in the build folder. When done, use python copy_back.py to copy changes back to the original src folder.
 
+## Usages
+#### Local API tests
+```shell
+cd build/server/examples & python test_local_api.py
+```
+#### Deploy services
+```shell
+text-generation-launcher --model-id tjluyao/llama-3-8b --lora-ids tjluyao/llama-3-8b-math;tjluyao/llama-3-8b-zh
+```
+#### Using quantization
+Add --quantize [Method] to the command above, for example:
+```shell
+text-generation-launcher --model-id TechxGenus/gemma-2b-GPTQ --lora-ids tjluyao/gemma-2b-it-math --quantize gptq
+```
+The supported quantization methods include: 
+- AWQ: 4-bit. Need specific quantized model. 
+- EETQ: 8-bit. Can work for any model.
+- GPTQ: 4-bit. Need specific quantized model.
+- Bitandbytes: 8-bit. Can work for any model.
+
 ## Model support matrix
+Note: L = Language, I = Image
 
 | Model                                                                        | MOE  | Size  | Modality | Quantization | Tensor Parallelism | FlashInfer | Multi-LoRA |   
 |------------------------------------------------------------------------------|------|-------|----------|--------------|--------------------|------------|------------|
