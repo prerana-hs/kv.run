@@ -495,14 +495,17 @@ fn shard_manager(
     let mut shard_args = vec![
         "serve".to_string(),
         model_id,
-        "--lora-ids".to_string(),
-        lora_ids,
         "--uds-path".to_string(),
         uds_path,
         "--logger-level".to_string(),
         log_level.to_string().to_uppercase(),
         "--json-output".to_string(),
     ];
+
+    if lora_ids != "empty".to_string() {
+        shard_args.push("--lora-ids".to_string());
+        shard_args.push(lora_ids.clone());
+    }
 
     // Activate trust remote code
     if trust_remote_code {
@@ -1033,15 +1036,6 @@ fn download_lora_adapters(args: &Args, running: Arc<AtomicBool>) -> Result<(), L
     // Parse Inference API token
     if let Ok(api_token) = env::var("HF_API_TOKEN") {
         envs.push(("HUGGING_FACE_HUB_TOKEN".into(), api_token.into()))
-    };
-
-    // If args.weights_cache_override is some, pass it to the download process
-    // Useful when running inside a HuggingFace Inference Endpoint
-    if let Some(weights_cache_override) = &args.weights_cache_override {
-        envs.push((
-            "WEIGHTS_CACHE_OVERRIDE".into(),
-            weights_cache_override.into(),
-        ));
     };
 
     // Start process
@@ -1631,7 +1625,9 @@ fn main() -> Result<(), LauncherError> {
     download_convert_model(&args, running.clone())?;
 
     // Download LoRA adapters
-    download_lora_adapters(&args, running.clone())?;
+    if args.lora_ids != "empty".to_string() {
+        download_lora_adapters(&args, running.clone())?;
+    }
 
     if !running.load(Ordering::SeqCst) {
         // Launcher was asked to stop
