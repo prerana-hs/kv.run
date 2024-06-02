@@ -7,7 +7,7 @@ use crate::{
     BestOfSequence, Details, ErrorResponse, FinishReason, GenerateParameters, GenerateRequest,
     GenerateResponse, GrammarType, HubModelInfo, HubTokenizerConfig, Infer, Info, Message,
     PrefillToken, SimpleToken, StreamDetails, StreamResponse, Token, TokenizeResponse, Usage,
-    Validation,
+    Validation, HubProcessorConfig,
 };
 use crate::{
     ChatCompletion, ChatCompletionChoice, ChatCompletionChunk, ChatCompletionComplete,
@@ -32,16 +32,16 @@ use futures::TryStreamExt;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use serde_json::Value;
 use std::convert::Infallible;
-use std::{env, io, thread};
+use std::{env, thread};
 use std::ffi::OsString;
-use std::io::{BufRead, BufReader, Lines};
-use std::net::SocketAddr;
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::mpsc;
 use std::thread::sleep;
 use std::time::Duration;
-use hf_hub::{Cache, Repo};
+use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use text_generation_client::{ShardInfo, ShardedClient};
 use tokenizers::Tokenizer;
 use tokio::select;
@@ -52,8 +52,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::{info_span, instrument, Instrument};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
-use std::os::unix::process::{CommandExt, ExitStatusExt};
-use serde::Deserialize;
+use std::os::unix::process::CommandExt;
+
 
 /// Generate tokens if `stream == false` or a stream of token if `stream == true`
 #[utoipa::path(
@@ -1345,7 +1345,8 @@ async fn tokenize(
             .iter()
             .zip(encoding.get_offsets())
             .map(|(&id, &(start, stop))| {
-                let text: String = input.chars().skip(start).take(stop - start).collect();
+                let text: String =
+                    String::from_utf8_lossy(&input.as_bytes()[start..stop]).to_string();
                 SimpleToken {
                     id,
                     text,
@@ -1393,11 +1394,11 @@ async fn metrics(prom_handle: Extension<PrometheusHandle>) -> String {
 )]
 #[instrument(skip_all)]
 async fn download_lora_adapter(
-    Extension(infer): Extension<Infer>,
+    Extension(_infer): Extension<Infer>,
     Json(req): Json<LoRAAdapterControlRequest>,
 ) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
 
-    let mut download_args = vec![
+    let download_args = vec![
         "download-lora-adapters".to_string(),
         req.lora_id.to_string(),
     ];
@@ -1429,7 +1430,7 @@ async fn download_lora_adapter(
         .spawn()
     {
         Ok(p) => p,
-        Err(err) => return Err((StatusCode::BAD_REQUEST,
+        Err(_) => return Err((StatusCode::BAD_REQUEST,
                                 Json(ErrorResponse {
                                     error: "TGI server not found.".to_string(),
                                     error_type: "TGI server not found".to_string(),
@@ -1497,9 +1498,10 @@ pub async fn run(
     addr: SocketAddr,
     allow_origin: Option<AllowOrigin>,
     ngrok: bool,
-    ngrok_authtoken: Option<String>,
-    ngrok_edge: Option<String>,
+    _ngrok_authtoken: Option<String>,
+    _ngrok_edge: Option<String>,
     tokenizer_config: HubTokenizerConfig,
+    processor_config: HubProcessorConfig,
     messages_api_enabled: bool,
     grammar_support: bool,
     max_client_batch_size: usize,
@@ -1600,6 +1602,7 @@ pub async fn run(
         shard_info.speculate,
         generation_health,
         tokenizer_config,
+        processor_config,
     );
 
     // Duration buckets
@@ -1773,46 +1776,9 @@ pub async fn run(
     if ngrok {
         #[cfg(feature = "ngrok")]
         {
-            use ngrok::config::TunnelBuilder;
-
-            let _ = addr;
-
-            let authtoken =
-                ngrok_authtoken.expect("`ngrok-authtoken` must be set when using ngrok tunneling");
-
-            let edge = ngrok_edge.expect("`ngrok-edge` must be set when using ngrok tunneling");
-
-            let tunnel = ngrok::Session::builder()
-                .authtoken(authtoken)
-                .connect()
-                .await
-                .unwrap()
-                .labeled_tunnel()
-                .label("edge", edge);
-
-            let listener = tunnel.listen().await.unwrap();
-
-            // Run prom metrics and health locally too
-            tokio::spawn(
-                axum::Server::bind(&addr)
-                    .serve(
-                        Router::new()
-                            .route("/health", get(health))
-                            .route("/metrics", get(metrics))
-                            .layer(Extension(health_ext))
-                            .layer(Extension(prom_handle))
-                            .into_make_service(),
-                    )
-                    //Wait until all requests are finished to shut down
-                    .with_graceful_shutdown(shutdown_signal()),
-            );
+            panic!("ngrok feature is not functional with axum=0.7 and hyper=1, waiting on https://github.com/ngrok/ngrok-rust/pull/137/files to re-enable.");
 
             // Run server
-            axum::Server::builder(listener)
-                .serve(app.into_make_service())
-                //Wait until all requests are finished to shut down
-                .with_graceful_shutdown(shutdown_signal())
-                .await?;
         }
         #[cfg(not(feature = "ngrok"))]
         {
@@ -1825,16 +1791,14 @@ pub async fn run(
         }
     } else {
         // Run server
-        axum::Server::bind(&addr)
-            .serve(app.into_make_service())
-            // Wait until all requests are finished to shut down
+
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())
             .await?;
     }
     Ok(())
 }
-
-
 
 /// Shutdown signal handler
 async fn shutdown_signal() {

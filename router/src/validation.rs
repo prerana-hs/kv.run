@@ -13,7 +13,7 @@ use thiserror::Error;
 use tokenizers::tokenizer::Tokenizer;
 // use tokenizers::TruncationDirection;
 use base64::{engine::general_purpose::STANDARD, Engine};
-use hf_hub::{Cache, Repo, RepoType};
+use hf_hub::{Cache, Repo};
 use image::{io::Reader as ImageReader, ImageFormat};
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
