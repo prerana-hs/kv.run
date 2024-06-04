@@ -82,6 +82,9 @@ For AWQ and EETQ quantization, you need to build their specific kernels:
 cd server & make install-awq
 # EETQ
 cd server & make install-eetq
+# GTPQ
+git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ
+pip install -vvv --no-build-isolation -e .
 ```
 
 ## Model support matrix
