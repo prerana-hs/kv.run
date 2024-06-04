@@ -41,6 +41,12 @@ pub(crate) struct VertexResponse {
     pub predictions: Vec<String>,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub(crate) struct LoRAAdapterControlRequest {
+    pub lora_id: String,
+    pub hf_api_token: Option<String>
+}
+
 /// Hub type
 #[derive(Clone, Debug, Deserialize)]
 pub struct HubModelInfo {
@@ -74,6 +80,20 @@ pub struct HubTokenizerConfig {
 }
 
 impl HubTokenizerConfig {
+    pub fn from_file<P: AsRef<std::path::Path>>(filename: P) -> Option<Self> {
+        let content = std::fs::read_to_string(filename).ok()?;
+        serde_json::from_str(&content).ok()
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct HubProcessorConfig {
+    pub chat_template: Option<ChatTemplateVersions>,
+    pub image_seq_len: usize,
+    pub processor_class: Option<String>,
+}
+
+impl HubProcessorConfig {
     pub fn from_file<P: AsRef<std::path::Path>>(filename: P) -> Option<Self> {
         let content = std::fs::read_to_string(filename).ok()?;
         serde_json::from_str(&content).ok()

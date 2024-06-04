@@ -51,7 +51,7 @@ class MultiLora:
         else:
             raise ValueError(f"Unknown lora_or_base={lora_or_base}")
         prompt = random.choice(prompts)
-        inputs = json.dumps({"inputs": prompt, "lora_id": lora_id})
+        inputs = prompt
 
         request = generate_pb2.Request(
             id=self.id,
@@ -128,7 +128,7 @@ class MultiLoraTui(App):
     scrollbar-size: 1 1;
 }
 """
-    TITLE = "Punica-TGI Multi-LoRA serving demo"
+    TITLE = "kv.run multi-LoRA serving demo"
 
     BINDINGS = [
         Binding(key="q", action="quit", description="Quit"),
@@ -167,15 +167,16 @@ if __name__ == '__main__':
     project_root = pathlib.Path(__file__).parents[1]
     model_dir = project_root / "model"
 
-    base_model = "meta-llama/Llama-2-7b-hf"
+    # base_model = "meta-llama/Llama-2-7b-hf"
+    # model_type = "llama"
+    # lora_ids = ['abcdabcd987/gsm8k-llama2-7b-lora-16',
+    #            'abcdabcd987/sqlctx-llama2-7b-lora-16',
+    #            'abcdabcd987/viggo-llama2-7b-lora-16']
+    base_model = "tjluyao/llama-3-8b"
     model_type = "llama"
-    lora_ids = ['abcdabcd987/gsm8k-llama2-7b-lora-16',
-                'abcdabcd987/sqlctx-llama2-7b-lora-16',
-                'abcdabcd987/viggo-llama2-7b-lora-16']
-    # base_model = "tjluyao/llama-3-8b"
-    # lora_ids = ['tjluyao/llama-3-8b-math',
-    #             'tjluyao/llama-3-8b-oaast',
-    #             'tjluyao/llama-3-8b-zh']
+    lora_ids = ['tjluyao/llama-3-8b-math',
+                'tjluyao/llama-3-8b-oaast',
+                'tjluyao/llama-3-8b-zh']
 
     lora_specs = {}
     for name, spec in DEMO.items():

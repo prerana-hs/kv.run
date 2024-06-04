@@ -7,7 +7,7 @@ from loguru import logger
 from typing import Optional
 from enum import Enum
 from huggingface_hub import hf_hub_download
-from text_generation_server.utils.lora_utils import load_lora_weights
+from text_generation_server.utils import load_lora_weights
 
 
 app = typer.Typer()
@@ -20,6 +20,7 @@ class Quantization(str, Enum):
     gptq = "gptq"
     awq = "awq"
     eetq = "eetq"
+    exl2 = "exl2"
     fp8 = "fp8"
 
 
@@ -274,7 +275,7 @@ def download_weights(
     if auto_convert:
         if not trust_remote_code:
             logger.warning(
-                f"????????BREAKING CHANGE in 2.0????????: Safetensors conversion is disabled without `--trust-remote-code` because "
+                f"🚨🚨BREAKING CHANGE in 2.0🚨🚨: Safetensors conversion is disabled without `--trust-remote-code` because "
                 f"Pickle files are unsafe and can essentially contain remote code execution!"
                 f"Please check for more information here: https://huggingface.co/docs/text-generation-inference/basic_tutorials/safety",
             )
