@@ -45,6 +45,7 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
 
 test = 'gemma'
 # test = 'llama-3'
+# test = 'llama-3-70'
 # test = 'llama-2'
 # test = 'mistral'
 # test = 'qwen2'
@@ -75,6 +76,12 @@ elif test == 'llama-3':
     requests = [make_input('tjluyao/llama-3-8b-zh', 'lora', id=0),
                 make_input('tjluyao/llama-3-8b-oaast', 'lora', id=1),
                 make_input('tjluyao/llama-3-8b-zh', 'empty', id=2)]
+elif test == 'llama-3-70':
+    # Load model
+    service = FlashinferLM(model_type="llama", model_id="TechxGenus/Meta-Llama-3-70B-Instruct-GPTQ",
+                           lora_ids=['Dogge/llama-3-70B-instruct-uncensored-lora'], quantize='GPTQ')
+    # Create an input batch of two queries
+    requests = [make_input('Dogge/llama-3-70B-instruct-uncensored-lora', 'lora', id=0)]
 elif test == "gemma":    
     requests = [make_input("tjluyao/gemma-2b-it-math", "base", id=0),
                 make_input("tjluyao/gemma-2b-it-math", "lora", id=1),
