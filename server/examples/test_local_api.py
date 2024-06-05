@@ -49,6 +49,8 @@ test = 'gemma'
 # test = 'llama-2'
 # test = 'mistral'
 # test = 'qwen2'
+# test = 'qwen2-1.8'
+# test = 'qwen2-70'
 
 if test == 'llama-2':
     # Load model
@@ -104,6 +106,18 @@ elif test == "qwen2":
                 make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'lora', id=1, promptOverride="什么是深度学习？")]
     
     service = FlashinferLM(model_type="qwen2", model_id='Qwen/Qwen1.5-7B-Chat', lora_ids=['REILX/Qwen1.5-7B-Chat-750Mb-lora'])
+elif test == "qwen2-1.8":
+    # Todo: Add qwen1.5 1.8b chat lora adapter / Output Repetition Problem
+    requests = [make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'base', id=0, promptOverride="给我讲个故事")]
+
+    service = FlashinferLM(model_type="qwen2", model_id='Qwen/Qwen1.5-1.8B-Chat',
+                           lora_ids=['REILX/Qwen1.5-7B-Chat-750Mb-lora'])
+elif test == "qwen2-70":
+    # Todo: Add qwen1.5 72b chat lora adapter
+    requests = [make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'base', id=0, promptOverride="给我讲个故事")]
+    
+    service = FlashinferLM(model_type="qwen2", model_id='Qwen/Qwen1.5-72B-Chat-GPTQ-Int4',
+                           lora_ids=['REILX/Qwen1.5-7B-Chat-750Mb-lora'], quantize='gptq')
 
 print(service.get_lora_adapters())
 tokenizer = service.tokenizer
