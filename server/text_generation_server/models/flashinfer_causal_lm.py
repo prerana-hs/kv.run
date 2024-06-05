@@ -340,7 +340,10 @@ class FlashinferLM(Model):
                 model_id, revision=revision, trust_remote_code=trust_remote_code
             )
             
-            qwenConfig.quantize = None
+            if quantize is None:
+                qwenConfig.quantize = None
+            else:
+                qwenConfig.quantize = quantize
             qwenConfig.use_medusa = False
 
             torch.distributed.barrier(group=process_group)
