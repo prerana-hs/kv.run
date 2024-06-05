@@ -78,8 +78,10 @@ elif test == 'llama-3':
                 make_input('tjluyao/llama-3-8b-zh', 'empty', id=2)]
 elif test == 'llama-3-70':
     # Load model
-    service = FlashinferLM(model_type="llama", model_id="TechxGenus/Meta-Llama-3-70B-Instruct-GPTQ",
-                           lora_ids=['Dogge/llama-3-70B-instruct-uncensored-lora'], quantize='GPTQ')
+    service = FlashinferLM(model_type="llama", model_id="TechxGenus/Meta-Llama-3-70B-Instruct-AWQ",
+                           lora_ids=['Dogge/llama-3-70B-instruct-uncensored-lora'], quantize='AWQ')
+    # service = FlashinferLM(model_type="llama", model_id="TechxGenus/Meta-Llama-3-70B-Instruct-GPTQ",
+    #                        lora_ids=['Dogge/llama-3-70B-instruct-uncensored-lora'], quantize='GPTQ')
     # Create an input batch of two queries
     requests = [make_input('Dogge/llama-3-70B-instruct-uncensored-lora', 'lora', id=0)]
 elif test == "gemma":    
