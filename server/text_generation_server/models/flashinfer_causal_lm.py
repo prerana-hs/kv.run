@@ -4,18 +4,25 @@
 import torch
 import torch.distributed
 from typing import Any, TypedDict, Optional
-from transformers.models.llama.modeling_llama import LlamaConfig
 from text_generation_server.utils.lora_utils import ModelLoraManager, ModelConfigForLora
 from text_generation_server.utils.cache_manager_flashinfer import ModelKvCache, KvCachePool
-from .custom_modeling.flashinfer_llama_modeling import LlamaForCausalLM
-from .custom_modeling.flashinfer_gemma_modeling import (
+from text_generation_server.models.custom_modeling.flashinfer_llama_modeling import LlamaForCausalLM
+from text_generation_server.models.custom_modeling.flashinfer_gemma_modeling import (
     GemmaTokenizerFast,
     FlashGemmaForCausalLM,
     GemmaConfig,
 )
-from .custom_modeling.flashinfer_mistral_modeling import MistralConfig, FlashMistralForCausalLM
-from .custom_modeling.flashinfer_qwen2_modeling import Qwen2Config, FlashQwen2ForCausalLM
-from transformers import PreTrainedTokenizerBase
+from text_generation_server.models.custom_modeling.flashinfer_phi_modeling import (
+    FlashPhiForCausalLM,
+    PhiConfig,
+)
+from text_generation_server.models.custom_modeling.flashinfer_mistral_modeling import (
+    MistralConfig, FlashMistralForCausalLM
+)
+from text_generation_server.models.custom_modeling.flashinfer_qwen2_modeling import (
+    Qwen2Config, FlashQwen2ForCausalLM
+)
+from transformers import PreTrainedTokenizerBase, AutoTokenizer
 import transformers
 from text_generation_server.pb import generate_pb2
 import json
@@ -39,7 +46,6 @@ from text_generation_server.utils import (
 )
 from text_generation_server.utils.dist import MEMORY_FRACTION
 from dataclasses import dataclass
-from transformers import AutoTokenizer
 
 from loguru import logger
 tracer = trace.get_tracer(__name__)
@@ -256,7 +262,7 @@ class FlashinferLM(Model):
         self.device = device
         self.dtype = dtype
 
-        if model_type == "llama":
+        if model_type == "llama" or model_type == "phi3" or model_type == "baichuan":
             tokenizer = AutoTokenizer.from_pretrained(model_id)
             model = LlamaForCausalLM.from_pretrained(
                 model_id,
@@ -328,6 +334,69 @@ class FlashinferLM(Model):
             model = FlashMistralForCausalLM(None, mistralConfig, weights)
             tokenizer = AutoTokenizer.from_pretrained(model_id)
             model.config = mistralConfig
+        elif model_type == "phi":
+            self.process_group, rank, world_size = initialize_torch_distributed()
+            if torch.cuda.is_available():
+                device = torch.device(f"cuda:{rank}")
+                dtype = torch.float16 if dtype is None else dtype
+            else:
+                raise NotImplementedError("FlashPhi is only available on GPU")
+
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_id,
+                revision=revision,
+                padding_side="left",
+                truncation_side="left",
+                trust_remote_code=trust_remote_code,
+            )
+
+            config = PhiConfig.from_pretrained(
+                model_id, revision=revision, trust_remote_code=trust_remote_code
+            )
+            config.quantize = quantize
+            config.speculator = speculator
+
+            torch.distributed.barrier(group=self.process_group)
+
+            filenames = weight_files(model_id, revision=revision, extension=".safetensors")
+            weights = Weights(filenames, device, dtype, process_group=self.process_group)
+            if config.quantize in ["gptq", "awq"]:
+                weights._set_gptq_params(model_id, revision)
+
+            model = FlashPhiForCausalLM(config, weights)
+            if speculator:
+                from text_generation_server.layers.medusa import MedusaModel
+                from huggingface_hub import hf_hub_download
+                import json
+                import os
+                from pathlib import Path
+
+                is_local_model = (
+                    Path(speculator).exists() and Path(speculator).is_dir()
+                ) or os.getenv("WEIGHTS_CACHE_OVERRIDE", None) is not None
+
+                if not is_local_model:
+                    medusa_config = hf_hub_download(
+                        speculator, revision=revision, filename="config.json"
+                    )
+                    medusa_head = hf_hub_download(
+                        speculator, revision=revision, filename="medusa_lm_head.pt"
+                    )
+                else:
+                    medusa_config = str(Path(speculator) / "config.json")
+                    medusa_head = str(Path(speculator) / "medusa_lm_head.pt")
+
+                with open(medusa_config, "r") as f:
+                    config = json.load(f)
+                medusa_sf = medusa_head[: -len(".pt")] + ".safetensors"
+                weights = Weights(
+                    [medusa_sf], device, dtype, process_group=self.process_group
+                )
+                lm_head = model.lm_head
+                model.lm_head = MedusaModel(config, weights, lm_head)
+
+            torch.distributed.barrier(group=self.process_group)
+            model.config = config        
         elif model_type == "qwen2":
             process_group, rank, world_size = initialize_torch_distributed()
             if torch.cuda.is_available():
@@ -408,7 +477,7 @@ class FlashinferLM(Model):
             max_pages=num_pages_to_allocate,
             num_layers=self.model_config.num_hidden_layers,
             num_heads=self.model_config.num_key_value_heads,
-            head_dim=self.model_config.hidden_size // self.model_config.num_attention_heads,
+            head_dim=self._find_padded_head_dim(self.model_config.hidden_size // self.model_config.num_attention_heads),
             page_len=PAGE_LEN,
             dtype=dtype,
             device=device
@@ -424,7 +493,8 @@ class FlashinferLM(Model):
         )
         
         self.loraManager = ModelLoraManager(self.model_config_for_lora, dtype)
-        self.loraManager.set_lora_weights(lora_ids, self.model_config_for_lora or {}, dtype)
+        if lora_ids:
+            self.loraManager.set_lora_weights(lora_ids, self.model_config_for_lora or {}, dtype)
         self.reqctx: dict[int, RequestContext] = {}
 
         super(FlashinferLM, self).__init__(
@@ -434,6 +504,13 @@ class FlashinferLM(Model):
             dtype=dtype,
             device=device,
         )
+        
+    def _find_padded_head_dim(self, head_dim):
+        flashInferDimensions = [64, 128, 256]
+        for dim in flashInferDimensions:
+            if head_dim <= dim:
+                return dim
+        raise ValueError("The head dimension is too large for FlashInfer")
 
     def load_lora_adapters(self, lora_ids: List[str]):
         self.loraManager.set_lora_weights(
