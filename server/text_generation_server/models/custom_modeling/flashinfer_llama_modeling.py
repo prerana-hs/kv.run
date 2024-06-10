@@ -10,8 +10,15 @@ from punica_kernels import (
     rms_norm,
 )
 from text_generation_server.utils.lora_utils import BatchedModelLoraWeight
-from text_generation_server.utils.cache_manager_flashinfer import KvCachePool, KvCacheBatchPosition
-from text_generation_server.layers.flashinfer_attention import FlashinferAttentionWrapper, AttentionRotaryParams
+from text_generation_server.utils.cache_manager_flashinfer import (
+    KvCachePool,
+    KvCacheBatchPosition,
+)
+from text_generation_server.layers.flashinfer_attention import (
+    FlashinferAttentionWrapper,
+    AttentionRotaryParams,
+)
+
 
 class FlashinferBatch:
     def __init__(self, seq_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len):
@@ -20,35 +27,33 @@ class FlashinferBatch:
         self.kv_page_indices = kv_page_indices
         self.kv_last_page_len = kv_last_page_len
 
+
 class LlamaAttention(nn.Module):
-    def __init__(self, flashinferWrapper: FlashinferAttentionWrapper, config: LlamaConfig, layer_idx: int):
+    def __init__(
+        self,
+        flashinferWrapper: FlashinferAttentionWrapper,
+        config: LlamaConfig,
+        layer_idx: int,
+    ):
         super().__init__()
 
         self.flashinferWrapper = flashinferWrapper
-        self.rotaryParams = AttentionRotaryParams(rope_scale=config.rope_scaling, rope_theta=config.rope_theta)
+        self.rotaryParams = AttentionRotaryParams(
+            rope_scale=config.rope_scaling, rope_theta=config.rope_theta
+        )
         self.layer_idx = layer_idx
-        
+
         q_dim = flashinferWrapper.num_attention_heads * flashinferWrapper.head_dim
         kv_dim = flashinferWrapper.num_key_value_heads * flashinferWrapper.head_dim
-        self.q_proj = nn.Linear(
-            flashinferWrapper.hidden_size, q_dim, bias=False
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size,
-            kv_dim, bias=False
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size,
-            kv_dim, bias=False
-        )
-        self.o_proj = nn.Linear(
-            q_dim, flashinferWrapper.hidden_size, bias=False
-        )
+        self.q_proj = nn.Linear(flashinferWrapper.hidden_size, q_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, kv_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, kv_dim, bias=False)
+        self.o_proj = nn.Linear(q_dim, flashinferWrapper.hidden_size, bias=False)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        kvCachePool: KvCachePool, 
+        kvCachePool: KvCachePool,
         prefillBatchPosition: KvCacheBatchPosition,
         decodeBatchPosition: KvCacheBatchPosition,
         loraWeight: BatchedModelLoraWeight,
@@ -57,11 +62,22 @@ class LlamaAttention(nn.Module):
         k = self.k_proj(hidden_states)
         v = self.v_proj(hidden_states)
         loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
-        attn_outputs_raw = self.flashinferWrapper.computeAttention(q, k, v, kvCachePool.cache_data[self.layer_idx], 
-                                kvCachePool.page_len, prefillBatchPosition, decodeBatchPosition, self.rotaryParams)
+        attn_outputs_raw = self.flashinferWrapper.computeAttention(
+            q,
+            k,
+            v,
+            kvCachePool.cache_data[self.layer_idx],
+            kvCachePool.page_len,
+            prefillBatchPosition,
+            decodeBatchPosition,
+            self.rotaryParams,
+        )
         attn_outputs = self.o_proj(attn_outputs_raw)
-        loraWeight.apply_lora_weight_attn(attn_outputs, attn_outputs_raw, self.layer_idx)
+        loraWeight.apply_lora_weight_attn(
+            attn_outputs, attn_outputs_raw, self.layer_idx
+        )
         return attn_outputs
+
 
 class LlamaMlp(nn.Module):
     def __init__(self, config: LlamaConfig, layer_idx: int):
@@ -75,9 +91,7 @@ class LlamaMlp(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
-        self,
-        x: torch.Tensor,
-        loraWeight: BatchedModelLoraWeight
+        self, x: torch.Tensor, loraWeight: BatchedModelLoraWeight
     ) -> torch.Tensor:
         gate = self.gate_proj(x)
         loraWeight.apply_lora_weight_gate(gate, x, self.layer_idx)
@@ -88,6 +102,7 @@ class LlamaMlp(nn.Module):
         down = self.down_proj(t)
         loraWeight.apply_lora_weight_gate(down, t, self.layer_idx)
         return down
+
 
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -100,7 +115,12 @@ class LlamaRMSNorm(nn.Module):
 
 
 class LlamaDecoderLayer(nn.Module):
-    def __init__(self, flashinferWrapper: FlashinferAttentionWrapper, config: LlamaConfig, layer_idx: int):
+    def __init__(
+        self,
+        flashinferWrapper: FlashinferAttentionWrapper,
+        config: LlamaConfig,
+        layer_idx: int,
+    ):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = LlamaAttention(flashinferWrapper, config, layer_idx)
@@ -113,7 +133,7 @@ class LlamaDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        kvCachePool: KvCachePool, 
+        kvCachePool: KvCachePool,
         prefillBatchPosition: KvCacheBatchPosition,
         decodeBatchPosition: KvCacheBatchPosition,
         loraWeight: BatchedModelLoraWeight,
@@ -126,7 +146,13 @@ class LlamaDecoderLayer(nn.Module):
 
         # Self Attention
         torch.cuda.nvtx.range_push("LlamaAttention")
-        hidden_states = self.self_attn(hidden_states, kvCachePool, prefillBatchPosition, decodeBatchPosition, loraWeight)
+        hidden_states = self.self_attn(
+            hidden_states,
+            kvCachePool,
+            prefillBatchPosition,
+            decodeBatchPosition,
+            loraWeight,
+        )
         torch.cuda.nvtx.range_pop()
         torch.cuda.nvtx.range_push("r")
         hidden_states = residual + hidden_states
@@ -181,10 +207,10 @@ class LlamaModel(LlamaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        kvCachePool: KvCachePool, 
+        kvCachePool: KvCachePool,
         prefillBatchPosition: KvCacheBatchPosition,
         decodeBatchPosition: KvCacheBatchPosition,
-        loraWeight: BatchedModelLoraWeight
+        loraWeight: BatchedModelLoraWeight,
     ) -> torch.Tensor:
         torch.cuda.nvtx.range_push("embed")
         hidden_states = self.embed_tokens(input_ids)
@@ -192,7 +218,13 @@ class LlamaModel(LlamaPreTrainedModel):
 
         for layer_idx, decoder_layer in enumerate(self.layers):
             torch.cuda.nvtx.range_push(f"layer={layer_idx}")
-            hidden_states = decoder_layer(hidden_states, kvCachePool, prefillBatchPosition, decodeBatchPosition, loraWeight)
+            hidden_states = decoder_layer(
+                hidden_states,
+                kvCachePool,
+                prefillBatchPosition,
+                decodeBatchPosition,
+                loraWeight,
+            )
             torch.cuda.nvtx.range_pop()
 
         torch.cuda.nvtx.range_push("lastnorm")
@@ -212,13 +244,19 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        kvCachePool: KvCachePool, 
+        kvCachePool: KvCachePool,
         prefillBatchPosition: KvCacheBatchPosition,
         decodeBatchPosition: KvCacheBatchPosition,
         loraWeight: BatchedModelLoraWeight,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         torch.cuda.nvtx.range_push("LlamaForCausalLM")
-        hidden_states = self.model(input_ids, kvCachePool, prefillBatchPosition, decodeBatchPosition, loraWeight)
+        hidden_states = self.model(
+            input_ids,
+            kvCachePool,
+            prefillBatchPosition,
+            decodeBatchPosition,
+            loraWeight,
+        )
         torch.cuda.nvtx.range_push("lm_head")
         logits = self.lm_head(hidden_states)
         torch.cuda.nvtx.range_pop()

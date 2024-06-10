@@ -8,6 +8,7 @@ from text_generation_server.models.custom_modeling.flashinfer_llama_modeling imp
 
 from transformers import AutoConfig, AutoTokenizer, GenerationConfig
 
+
 class FlashinferLlama(FlashinferLM):
     def __init__(
         self,
@@ -18,12 +19,12 @@ class FlashinferLlama(FlashinferLM):
         dtype: Optional[torch.dtype] = torch.float16,
         trust_remote_code: bool = False,
     ):
-        
+
         if torch.cuda.is_available():
             device = torch.device("cuda")
         else:
             raise NotImplementedError("Flashinfer Llama is only available on GPU")
-        
+
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = LlamaForCausalLM.from_pretrained(
             model_id,
@@ -33,15 +34,15 @@ class FlashinferLlama(FlashinferLM):
             device_map=device,
             trust_remote_code=trust_remote_code,
         )
-        
+
         llamaConfig = model.config
         llamaConfig.quantize = quantize
-        
+
         super(FlashinferLlama, self).__init__(
             model=model,
             tokenizer=tokenizer,
-            config = llamaConfig,
+            config=llamaConfig,
             dtype=dtype,
             device=device,
-            lora_ids = lora_ids,
+            lora_ids=lora_ids,
         )
