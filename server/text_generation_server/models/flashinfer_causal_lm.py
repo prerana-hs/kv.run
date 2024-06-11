@@ -130,18 +130,18 @@ class FlashinferBatch(CausalLMBatch):
 
 class RequestContext:
     def __init__(
-            self,
-            input_ids: list[int],
-            lora_id: str,
-            tokenizer,
-            *,
-            temperature: float,
-            repetition_penalty: float,
-            top_p: float,
-            top_k: int,
-            maxlen: int,
-            stop_token_id: int,
-            prefill_logprobs: bool
+        self,
+        input_ids: list[int],
+        lora_id: str,
+        tokenizer,
+        *,
+        temperature: float,
+        repetition_penalty: float,
+        top_p: float,
+        top_k: int,
+        maxlen: int,
+        stop_token_id: int,
+        prefill_logprobs: bool,
     ):
         self.temperature = temperature
         self.repetition_penalty = repetition_penalty
@@ -207,13 +207,13 @@ class RequestContext:
 
 class FlashinferLM(Model):
     def __init__(
-            self,
-            model: torch.nn.Module,
-            tokenizer: PreTrainedTokenizerBase,
-            config: PretrainedConfig,
-            dtype: torch.dtype,
-            device: torch.device,
-            lora_ids: List[str] = None,
+        self,
+        model: torch.nn.Module,
+        tokenizer: PreTrainedTokenizerBase,
+        config: PretrainedConfig,
+        dtype: torch.dtype,
+        device: torch.device,
+        lora_ids: List[str] = None,
     ):
         self.device = device
         self.dtype = dtype
@@ -249,6 +249,7 @@ class FlashinferLM(Model):
             * config.num_attention_heads
             * head_dim_padded
             * dtype_size
+        )
 
         currentDevice = torch.cuda.current_device()
         total_free_memory, _ = torch.cuda.mem_get_info(currentDevice)
@@ -357,7 +358,7 @@ class FlashinferLM(Model):
                     top_k=parameters.top_k,
                     maxlen=min(stop.max_new_tokens, 4096),
                     stop_token_id=self.tokenizer.eos_token_id,
-                    prefill_logprobs=prefill_logprobs
+                    prefill_logprobs=prefill_logprobs,
                 )
                 ids.append(id)
         return ids
@@ -439,17 +440,26 @@ class FlashinferLM(Model):
         for i, (reqid, reqctx) in enumerate(reqs):
             next_token_id = reqctx.get_next_token_id(logits[i].unsqueeze(0))
             reqctx.append_token(next_token_id)
-            #text = reqctx.decode_tokens() # todo: ??
-            text = self.tokenizer.decode(next_token_id,
-                                         clean_up_tokenization_spaces=False,
-                                         skip_special_tokens=False)
+            # text = reqctx.decode_tokens() # todo: ??
+            text = self.tokenizer.decode(
+                next_token_id,
+                clean_up_tokenization_spaces=False,
+                skip_special_tokens=False,
+            )
 
             is_stop = reqctx.is_stop()
             if is_stop != None:
-                output_text = self.tokenizer.decode(reqctx.output_ids[reqctx.prompt_len:],
-                                                    clean_up_tokenization_spaces=False,
-                                                    skip_special_tokens=False)
-                generated_text = GeneratedText(output_text, len(reqctx.output_ids) - reqctx.prompt_len + 1, is_stop, None)
+                output_text = self.tokenizer.decode(
+                    reqctx.output_ids[reqctx.prompt_len :],
+                    clean_up_tokenization_spaces=False,
+                    skip_special_tokens=False,
+                )
+                generated_text = GeneratedText(
+                    output_text,
+                    len(reqctx.output_ids) - reqctx.prompt_len + 1,
+                    is_stop,
+                    None,
+                )
                 self.reqctx.pop(reqid)
                 batchKvCache.release(reqid)
             else:
@@ -459,8 +469,8 @@ class FlashinferLM(Model):
             # Prefill
             if reqctx.prefill and reqctx.prefill_logprobs:
                 # Remove generated token to only have prefill and add nan for first prompt token
-                prefill_logprobs = [] # todo
-                prefill_token_ids = reqctx.output_ids[:reqctx.prompt_len]
+                prefill_logprobs = []  # todo
+                prefill_token_ids = reqctx.output_ids[: reqctx.prompt_len]
                 prefill_texts = self.tokenizer.batch_decode(
                     prefill_token_ids,
                     clean_up_tokenization_spaces=False,
@@ -479,7 +489,7 @@ class FlashinferLM(Model):
                 reqctx.prefill_tokens,
                 Tokens(
                     [next_token_id],
-                    [], # prob
+                    [],  # prob
                     [text],
                     [next_token_id in self.all_special_ids],
                 ),
