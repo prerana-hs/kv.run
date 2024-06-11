@@ -6,8 +6,12 @@ from text_generation_server.utils.cache_manager_flashinfer import (
     ModelKvCache,
     KvCachePool,
 )
+from text_generation_server.utils.tokens import (
+    StopSequenceCriteria,
+    StoppingCriteria,
+    FinishReason,
+)
 from text_generation_server.layers.flashinfer_attention import find_padded_head_dim
-
 from transformers import PreTrainedTokenizerBase, PretrainedConfig
 import transformers
 from text_generation_server.pb import generate_pb2
@@ -126,17 +130,18 @@ class FlashinferBatch(CausalLMBatch):
 
 class RequestContext:
     def __init__(
-        self,
-        input_ids: list[int],
-        lora_id: str,
-        tokenizer,
-        *,
-        temperature: float,
-        repetition_penalty: float,
-        top_p: float,
-        top_k: int,
-        maxlen: int,
-        stop_token_id: int,
+            self,
+            input_ids: list[int],
+            lora_id: str,
+            tokenizer,
+            *,
+            temperature: float,
+            repetition_penalty: float,
+            top_p: float,
+            top_k: int,
+            maxlen: int,
+            stop_token_id: int,
+            prefill_logprobs: bool
     ):
         self.temperature = temperature
         self.repetition_penalty = repetition_penalty
@@ -144,6 +149,7 @@ class RequestContext:
         self.top_k = top_k
         self.maxlen = maxlen
         self.stop_token_id = stop_token_id
+        self.prefill_logprobs = prefill_logprobs
 
         # Logits processing adapted from: https://github.com/lm-sys/FastChat/blob/bb7ca37c2bfad629ba4751dec188bdcdc2cf0c81/fastchat/serve/inference.py
         self.logits_processor = transformers.LogitsProcessorList()
@@ -188,43 +194,26 @@ class RequestContext:
     def append_token(self, token_id: int):
         self.output_ids.append(token_id)
 
-    def is_stop(self) -> int:
-        if len(self.output_ids) >= self.maxlen:
-            return True
+    def is_stop(self) -> FinishReason:
+        if len(self.output_ids) - self.prompt_len >= self.maxlen:
+            return FinishReason.FINISH_REASON_LENGTH
         if self.output_ids[-1] == self.stop_token_id:
-            return True
-        return False
+            return FinishReason.FINISH_REASON_EOS_TOKEN
+        return None
 
     def is_prefill(self) -> bool:
         return len(self.output_ids) == self.prompt_len
 
-    def decode_tokens(self) -> str:
-        # Adapted from: https://github.com/huggingface/text-generation-inference/blob/a5def7c222174e03d815f890093584f3e815c5ce/server/text_generation_server/models/model.py#L68
-        prefix_text = self.tokenizer.decode(
-            self.output_ids[self.prefix_offset : self.read_offset],
-            skip_special_tokens=True,
-        )
-        new_text = self.tokenizer.decode(
-            self.output_ids[self.prefix_offset :], skip_special_tokens=True
-        )
-        if len(new_text) > len(prefix_text) and not new_text.endswith("\uFFFD"):
-            new_text = new_text[len(prefix_text) :]
-            self.prefix_offset = self.read_offset
-            self.read_offset = len(self.output_ids)
-            return new_text
-        else:
-            return ""
-
 
 class FlashinferLM(Model):
     def __init__(
-        self,
-        model: torch.nn.Module,
-        tokenizer: PreTrainedTokenizerBase,
-        config: PretrainedConfig,
-        dtype: torch.dtype,
-        device: torch.device,
-        lora_ids: List[str] = None,
+            self,
+            model: torch.nn.Module,
+            tokenizer: PreTrainedTokenizerBase,
+            config: PretrainedConfig,
+            dtype: torch.dtype,
+            device: torch.device,
+            lora_ids: List[str] = None,
     ):
         self.device = device
         self.dtype = dtype
@@ -260,7 +249,6 @@ class FlashinferLM(Model):
             * config.num_attention_heads
             * head_dim_padded
             * dtype_size
-        )
 
         currentDevice = torch.cuda.current_device()
         total_free_memory, _ = torch.cuda.mem_get_info(currentDevice)
@@ -354,6 +342,7 @@ class FlashinferLM(Model):
                 input = batch.input_ids[r]
                 parameters = batch.requests[r].parameters
                 stop = batch.requests[r].stopping_parameters
+                prefill_logprobs = batch.requests[r].prefill_logprobs
 
                 if lora_id not in self.loraManager.lora_weights_cpu:
                     raise ValueError("Cannot find lora weights", lora_id)
@@ -368,6 +357,7 @@ class FlashinferLM(Model):
                     top_k=parameters.top_k,
                     maxlen=min(stop.max_new_tokens, 4096),
                     stop_token_id=self.tokenizer.eos_token_id,
+                    prefill_logprobs=prefill_logprobs
                 )
                 ids.append(id)
         return ids
@@ -381,8 +371,6 @@ class FlashinferLM(Model):
 
         if hasattr(batch, "requests") and batch.requests:
             ids = self.add_request(batch)
-            # if ids:
-            #    print("====Request " + str(ids) + " added.")
 
         if not self.reqctx:
             return None, batch, (0, 0)
@@ -399,7 +387,8 @@ class FlashinferLM(Model):
         decode_reqIds = []
 
         for requestId, req in reqs:
-            if req.is_prefill():
+            req.prefill = req.is_prefill()
+            if req.prefill:
                 input_ids.extend(req.output_ids)
                 prefill_reqIds.append(requestId)
                 batchKvCache.create(requestId, req.prompt_len)
@@ -450,30 +439,52 @@ class FlashinferLM(Model):
         for i, (reqid, reqctx) in enumerate(reqs):
             next_token_id = reqctx.get_next_token_id(logits[i].unsqueeze(0))
             reqctx.append_token(next_token_id)
-            text = reqctx.decode_tokens()
+            #text = reqctx.decode_tokens() # todo: ??
+            text = self.tokenizer.decode(next_token_id,
+                                         clean_up_tokenization_spaces=False,
+                                         skip_special_tokens=False)
 
             is_stop = reqctx.is_stop()
-            if is_stop:
-                output_text, _, _ = self.decode_token(
-                    reqctx.output_ids[: reqctx.read_offset], skip_special_tokens=True
-                )
-                generated_text = GeneratedText(output_text, reqctx.read_offset, 0, None)
+            if is_stop != None:
+                output_text = self.tokenizer.decode(reqctx.output_ids[reqctx.prompt_len:],
+                                                    clean_up_tokenization_spaces=False,
+                                                    skip_special_tokens=False)
+                generated_text = GeneratedText(output_text, len(reqctx.output_ids) - reqctx.prompt_len + 1, is_stop, None)
                 self.reqctx.pop(reqid)
                 batchKvCache.release(reqid)
             else:
                 generated_text = None
                 all_stop = False
 
+            # Prefill
+            if reqctx.prefill and reqctx.prefill_logprobs:
+                # Remove generated token to only have prefill and add nan for first prompt token
+                prefill_logprobs = [] # todo
+                prefill_token_ids = reqctx.output_ids[:reqctx.prompt_len]
+                prefill_texts = self.tokenizer.batch_decode(
+                    prefill_token_ids,
+                    clean_up_tokenization_spaces=False,
+                    skip_special_tokens=False,
+                )
+                reqctx.prefill_tokens = Tokens(
+                    prefill_token_ids,
+                    prefill_logprobs,
+                    prefill_texts,
+                    is_special=[],
+                )
+                reqctx.prefix_offset = reqctx.prompt_len
+
             generation = Generation(
                 reqid,
-                None,
+                reqctx.prefill_tokens,
                 Tokens(
                     [next_token_id],
-                    reqctx.output_ids[reqctx.prefix_offset : reqctx.read_offset],
+                    [], # prob
                     [text],
                     [next_token_id in self.all_special_ids],
                 ),
                 generated_text,
+                # top_tokens
                 None,
             )
             generations.append(generation)
