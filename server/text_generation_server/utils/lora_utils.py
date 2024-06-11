@@ -209,6 +209,20 @@ def load_lora_weights(lora_id):
     config_path = hf_hub_download(lora_id, filename='adapter_config.json')
     return model_path, config_path
 
+def load_lora_weights_local(lora_id):
+    # load lora weights from local
+    try:
+        model_path = lora_id + '/adapter_model.bin'
+    except:
+        from safetensors.torch import load_file
+        model_path = hf_hub_download(lora_id, filename='adapter_model.safetensors')
+        tmp = load_file(model_path, device="cpu")
+        model_path = model_path.replace('.safetensors', '.bin')
+        torch.save(tmp, model_path)
+    config_path = lora_id + '/adapter_config.json'
+    print(f"model_path: {model_path}, config_path: {config_path}")
+    return model_path, config_path
+
 class ModelLoraManager:
     def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap = 32):
         self.lora_weights_gpu: Dict[str, ModelLoraWeight] = {}
@@ -225,7 +239,8 @@ class ModelLoraManager:
             ):
         for lora_id in lora_ids:
             if lora_id not in self.lora_weights_cpu:
-                model_path, config_path = load_lora_weights(lora_id)
+                # model_path, config_path = load_lora_weights(lora_id)
+                model_path, config_path = load_lora_weights_local(lora_id)
                 raw_weights = torch.load(model_path, map_location='cpu', weights_only=True)
                 lora_rank = peft.config.PeftConfigMixin.from_json_file(config_path)['r']
                 lora_weight = ModelLoraWeight(model_config, lora_rank*2, dtype, 'cpu') \
@@ -235,6 +250,7 @@ class ModelLoraManager:
                 lora_weight.copy_from_tensors(converted_weights)
                 del converted_weights
                 self.lora_weights_cpu[lora_id] = lora_weight
+                print(self.lora_weights_cpu)
                 logger.info(f'{lora_id} loaded in cpu memory!')
 
                 
