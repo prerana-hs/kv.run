@@ -141,7 +141,7 @@ class RequestContext:
         top_k: int,
         maxlen: int,
         stop_token_id: int,
-        prefill_logprobs: bool,
+        prefill_logprobs: bool = True,
     ):
         self.temperature = temperature
         self.repetition_penalty = repetition_penalty
@@ -483,6 +483,8 @@ class FlashinferLM(Model):
                     is_special=[],
                 )
                 reqctx.prefix_offset = reqctx.prompt_len
+            else:
+                reqctx.prefill_tokens = None
 
             generation = Generation(
                 reqid,
