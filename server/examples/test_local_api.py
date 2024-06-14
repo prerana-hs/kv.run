@@ -6,6 +6,7 @@ from text_generation_server.models.flashinfer_mistral import FlashinferMistral
 from text_generation_server.models.flashinfer_phi import FlashinferPhi
 from text_generation_server.models.flashinfer_qwen2 import FlashinferQwen2
 from text_generation_server.models.flashinfer_causal_lm import FlashinferBatch
+from text_generation_server.models.flashinfer_yi import FlashinferYi
 import random, json
 from test_cases import DEMO, LoraSpec
 
@@ -49,20 +50,21 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
     return request
 
 
-test = "gemma"
+# test = "gemma"
 # test = 'llama-3'
 # test = 'llama-3-70'
-test = 'llama-2'
+# test = 'llama-2'
 # test = 'mistral'
 # test = 'qwen2'
 # test = 'qwen2-1.8'
 # test = 'qwen2-70'
+test = 'yi'
 
 if test == "llama-2":
     # Load model
     # service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
     #                        lora_ids=['abcdabcd987/gsm8k-llama2-7b-lora-16'])
-    service = FlashinferLM(model_type="llama", model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
+    service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
                           lora_ids=['/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16'])
     # Create an input batch of two queries
     # requests = [make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
@@ -232,6 +234,23 @@ elif test == "baichuan":
         ),
     ]
     service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
+elif test == "yi":
+    service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    requests = [
+        make_input(
+            "/scratch/hy2203/models/01-ai/Yi-6B",
+            "base",
+            id=0,
+            promptOverride="why is deep learning so popular these days?",
+        ),
+        make_input(
+            "abcdabcd987/gsm8k-llama2-7b-lora-16",
+            "base",
+            id=1,
+            promptOverride="What are the differences between Manhattan and Brooklyn",
+        ),
+    ]
+    
 
 print(service.get_lora_adapters())
 tokenizer = service.tokenizer
