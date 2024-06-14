@@ -42,7 +42,7 @@ jobs:
           flavor: |
             latest=auto
           images: |
-            ghcr.io/mlsys-io/kv.run
+            ghcr.io/${{env.GITHUB_REPOSITORY}}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -50,17 +50,19 @@ jobs:
             type=raw,value=sha-${{ env.GITHUB_SHA_SHORT }}
       - name: Build and push Docker image
         id: build-and-push
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile
+          file: Dockerfile_kvrun
           push: true
           platforms: 'linux/amd64'
           build-args: |
             GIT_SHA=${{ env.GITHUB_SHA }}
             DOCKER_LABEL=sha-${{ env.GITHUB_SHA_SHORT }}
-          tags: ${{ steps.meta.outputs.tags || steps.meta-pr.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels || steps.meta-pr.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          #cache-from: type=gha
+          #cache-to: type=gha,mode=max
 
 #  integration-tests:
 #    runs-on: [self-hosted, Linux, X64]
