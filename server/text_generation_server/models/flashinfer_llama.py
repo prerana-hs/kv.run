@@ -15,6 +15,7 @@ from text_generation_server.utils import (
     Weights,
 )
 
+
 class FlashinferLlama(FlashinferLM):
     def __init__(
         self,
@@ -25,6 +26,7 @@ class FlashinferLlama(FlashinferLM):
         dtype: Optional[torch.dtype] = torch.float16,
         trust_remote_code: bool = False,
     ):
+        dtype = dtype or torch.float16
         self.process_group, rank, world_size = initialize_torch_distributed()
         if torch.cuda.is_available():
             device = torch.device(f"cuda:{rank}")
@@ -76,7 +78,7 @@ class FlashinferLlama(FlashinferLM):
         super(FlashinferLlama, self).__init__(
             model=model,
             tokenizer=tokenizer,
-            config = config,
+            config=config,
             dtype=dtype,
             device=device,
             lora_ids=lora_ids,
