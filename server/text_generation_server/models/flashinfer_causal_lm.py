@@ -470,7 +470,7 @@ class FlashinferLM(Model):
                 all_stop = False
 
             # Prefill
-            if reqctx.prefill and reqctx.prefill_logprobs:
+            if reqctx.prefill:  # and reqctx.prefill_logprobs:
                 # Remove generated token to only have prefill and add nan for first prompt token
                 prefill_logprobs = []  # todo
                 prefill_token_ids = reqctx.output_ids[: reqctx.prompt_len]
@@ -494,7 +494,7 @@ class FlashinferLM(Model):
                 reqctx.prefill_tokens,
                 Tokens(
                     [next_token_id],
-                    [],  # prob
+                    [0],  # prob
                     [text],
                     [next_token_id in self.all_special_ids],
                 ),
