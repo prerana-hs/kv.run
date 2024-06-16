@@ -145,6 +145,7 @@ class FlashinferAttentionWrapper:
             self._head_padded_dim,
         )
 
+        print(rotaryParams.pos_encoding_mode.value)
         attn_output_prefill = prefill_wrapper.forward(
             q,
             cacheData,
