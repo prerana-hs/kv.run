@@ -269,6 +269,8 @@ display_results = {}
 while True:
     generations, _, _ = service.generate_token(FlashinferBatch.Empty(batch.id))
     for gen in generations:
+        if gen.prefill_tokens:
+            prompt = tokenizer.decode(gen.prefill_tokens.token_ids)
         if gen.generated_text:
             display_results[gen.request_id] = [
                 "Prompt: "
