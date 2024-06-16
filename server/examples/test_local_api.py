@@ -49,7 +49,6 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
 
     request = generate_pb2.Request(
         id=id,
-        cache_id=None,
         inputs=inputs,
         truncate=256,
         prefill_logprobs=True,
@@ -273,7 +272,7 @@ while True:
         if gen.generated_text:
             display_results[gen.request_id] = [
                 "Prompt: "
-                + tokenizer.decode(gen.prefill_tokens.token_ids)
+                # + tokenizer.decode(gen.prefill_tokens.token_ids)
                 + "\nAnswer: "
                 + gen.generated_text.text
             ]
