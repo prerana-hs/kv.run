@@ -10,12 +10,14 @@ class KvCacheBatchPosition:
         kv_page_indptr: torch.Tensor,
         kv_page_indices: torch.Tensor,
         kv_last_page_len: torch.Tensor,
+        seq_lens: torch.Tensor,
         total_seq_len: int,
     ):
         self.total_seq_len = total_seq_len
         self.seq_indptr = seq_indptr
         self.kv_page_indptr = kv_page_indptr
         self.kv_page_indices = kv_page_indices
+        self.seq_lens = seq_lens
         self.kv_last_page_len = kv_last_page_len
 
 
@@ -133,11 +135,17 @@ class BatchKvCache:
         seq_indptr = torch.tensor(
             seq_indptr_list, dtype=torch.int32, device=self.device
         )
+        seq_lens = torch.tensor(
+            map(lambda reqCache: reqCache.kv_len, self.kvCacheDict.items()),
+            dtype=torch.int32,
+            device=self.device,
+        )
         return KvCacheBatchPosition(
             seq_indptr=seq_indptr,
             kv_page_indptr=kv_page_indptr,
             kv_page_indices=kv_page_indices,
             kv_last_page_len=kv_last_page_len,
+            seq_lens=seq_lens,
             total_seq_len=cum_seq_len,
         )
 
