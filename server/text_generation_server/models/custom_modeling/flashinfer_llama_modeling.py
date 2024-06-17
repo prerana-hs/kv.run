@@ -80,9 +80,9 @@ class FlashLlamaAttention(nn.Module):
         super().__init__()
         self.flashinferWrapper = flashinferWrapper
         self.rotaryParams = AttentionRotaryParams(
-            rope_scale=config.rope_scaling,
-            rope_theta=config.rope_theta,
-            # pos_encoding_mode = POS_ENCODING_MODE.NONE
+            # rope_scale=config.rope_scaling,
+            # rope_theta=config.rope_theta,
+            pos_encoding_mode = POS_ENCODING_MODE.NONE
         )
         self.rotary_emb = PositionRotaryEmbedding.static(
             config=config,
@@ -125,20 +125,20 @@ class FlashLlamaAttention(nn.Module):
         v = v_proj.contiguous()
         loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
 
-        # self.rotary_emb(
-        #     q_proj.view(
-        #         -1,
-        #         self.flashinferWrapper.num_attention_heads,
-        #         self.flashinferWrapper.head_dim,
-        #     )[:, :, : self.flashinferWrapper.head_dim],
-        #     k_proj.view(
-        #         -1,
-        #         self.flashinferWrapper.num_key_value_heads,
-        #         self.flashinferWrapper.head_dim,
-        #     )[:, :, : self.flashinferWrapper.head_dim],
-        #     cos,
-        #     sin,
-        # )
+        self.rotary_emb(
+            q.view(
+                -1,
+                self.flashinferWrapper.num_attention_heads,
+                self.flashinferWrapper.head_dim,
+            ),
+            k.view(
+                -1,
+                self.flashinferWrapper.num_key_value_heads,
+                self.flashinferWrapper.head_dim,
+            ),
+            cos,
+            sin,
+        )
 
         attn_outputs_raw = self.flashinferWrapper.computeAttention(
             q,

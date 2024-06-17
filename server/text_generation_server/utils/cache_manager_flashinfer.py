@@ -110,6 +110,7 @@ class BatchKvCache:
         kv_page_indptr_list = []
         seq_indptr_list = []
         kv_last_page_len_list = []
+        seq_lens_list = []
         cum_pages = 0
         cum_seq_len = 0
         for requestId in requestIds:
@@ -118,6 +119,7 @@ class BatchKvCache:
             kv_page_indptr_list.append(cum_pages)
             seq_indptr_list.append(cum_seq_len)
             kv_last_page_len_list.append(kvCache.kv_last_page_len)
+            seq_lens_list.append(kvCache.kv_len)
             cum_pages += len(kvCache.kv_page_indices)
             cum_seq_len += kvCache.kv_len if isPrefill else 1
 
@@ -136,7 +138,7 @@ class BatchKvCache:
             seq_indptr_list, dtype=torch.int32, device=self.device
         )
         seq_lens = torch.tensor(
-            map(lambda reqCache: reqCache.kv_len, self.kvCacheDict.items()),
+            seq_lens_list,
             dtype=torch.int32,
             device=self.device,
         )
