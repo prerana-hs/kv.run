@@ -3570,6 +3570,7 @@ dependencies = [
 name = "text-generation-launcher"
 version = "2.0.5-dev0"
 dependencies = [
+ "bitstream-io",
  "clap",
  "ctrlc",
  "float_eq",
@@ -3593,6 +3594,7 @@ dependencies = [
  "axum 0.7.5",
  "axum-tracing-opentelemetry",
  "base64 0.22.1",
+ "bitstream-io",
  "clap",
  "futures",
  "futures-util",
