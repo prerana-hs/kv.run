@@ -105,13 +105,15 @@ if test == "llama-2":
     # Load model
     # service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
     #                        lora_ids=['abcdabcd987/gsm8k-llama2-7b-lora-16'])
-    service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
-                          lora_ids=['/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16'])
+    # service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
+    #                       lora_ids=['/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16'])
+    service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf")
+
     # Create an input batch of two queries
     # requests = [make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
     #             make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
-    requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
-                make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
+    # 
+    requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?")]
 elif test == 'llama-3':
     # Load model
     service = FlashinferLlama(
@@ -281,20 +283,22 @@ elif test == "baichuan":
 =======
     service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
 elif test == "yi":
-    service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    # service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+
     requests = [
-        make_input(
-            "/scratch/hy2203/models/01-ai/Yi-6B",
-            "base",
-            id=0,
-            promptOverride="why is deep learning so popular these days?",
-        ),
-        make_input(
-            "abcdabcd987/gsm8k-llama2-7b-lora-16",
-            "base",
-            id=1,
-            promptOverride="What are the differences between Manhattan and Brooklyn",
-        ),
+        # make_input(
+        #     "/scratch/hy2203/models/01-ai/Yi-6B",
+        #     "base",
+        #     id=0,
+        #     promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
+        # ),
+        # make_input(
+        #     "/scratch/hy2203/models/01-ai/Yi-6B",
+        #     "lora",
+        #     id=1,
+        #     promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
+        # ),
     ]
     
 >>>>>>> a174cc2 (update from master)
@@ -316,10 +320,10 @@ while True:
     generations, _, _ = service.generate_token(FlashinferBatch.Empty(batch.id))
     for gen in generations:
         if gen.prefill_tokens:
+            prompt = tokenizer.decode(gen.prefill_tokens.token_ids)
+        if gen.generated_text:
             display_results[gen.request_id] = [
-                "Prompt:\n"
-                + tokenizer.decode(gen.prefill_tokens.token_ids)
-                + "\nAnswer:\n"
+                "Prompt:\n" + prompt + "\nAnswer:\n" + gen.generated_text.text
             ]
         if gen.generated_text:
             display_results[gen.request_id] += [gen.generated_text.text]
