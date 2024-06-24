@@ -124,7 +124,7 @@ class FlashLlamaAttention(nn.Module):
         q = q_proj.contiguous()
         k = k_proj.contiguous()
         v = v_proj.contiguous()
-        loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
+        # loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
 
         self.rotary_emb(
             q.view(

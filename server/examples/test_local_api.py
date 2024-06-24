@@ -19,7 +19,6 @@ except:
 from text_generation_server.models_flashinfer.flashinfer_causal_lm import (
     FlashinferBatch,
 )
-
 import random, json
 from test_cases import DEMO, LoraSpec
 
@@ -76,16 +75,6 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
     )
     return request
 
-
-# test = "gemma"
-# test = 'llama-3'
-# test = 'llama-3-70'
-# test = 'llama-2'
-# test = 'mistral'
-# test = 'qwen2'
-# test = 'qwen2-1.8'
-# test = 'qwen2-70'
-test = 'yi'
 
 if test == "llama-2":
     # Load model
@@ -265,16 +254,16 @@ elif test == "baichuan":
     )
     service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
 elif test == "yi":
-    # service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
-    service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    # service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
 
     requests = [
-        # make_input(
-        #     "/scratch/hy2203/models/01-ai/Yi-6B",
-        #     "base",
-        #     id=0,
-        #     promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
-        # ),
+        make_input(
+            "/scratch/hy2203/models/01-ai/Yi-6B",
+            "base",
+            id=0,
+            promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
+        ),
         # make_input(
         #     "/scratch/hy2203/models/01-ai/Yi-6B",
         #     "lora",
