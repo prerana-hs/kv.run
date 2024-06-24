@@ -5,6 +5,7 @@ from text_generation_server.models.flashinfer_gemma import FlashinferGemma
 from text_generation_server.models.flashinfer_mistral import FlashinferMistral
 from text_generation_server.models.flashinfer_phi import FlashinferPhi
 from text_generation_server.models.flashinfer_qwen2 import FlashinferQwen2
+from text_generation_server.models.flashinfer_chatglm import FlashinferChatGLM
 from text_generation_server.models.flashinfer_causal_lm import FlashinferBatch
 import random, json
 from test_cases import DEMO, LoraSpec
@@ -48,14 +49,16 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
     )
     return request
 
-test = 'gemma'
+# test = 'gemma'
 # test = 'llama-3'
 # test = 'llama-3-70'
 # test = 'llama-2'
 # test = 'mistral'
+# test = 'qwen1.5'
+# test = 'qwen1.5-1.8'
+# test = 'qwen1.5-70'
 # test = 'qwen2'
-# test = 'qwen2-1.8'
-# test = 'qwen2-70'
+test = 'chatglm'
 
 if test == 'llama-2':
     # Load model
@@ -106,18 +109,21 @@ elif test == "mistral":
     requests = [make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=0, promptOverride="why is deep learning so popular these days?"),
                 make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=1, promptOverride="What are the differences between Manhattan and Brooklyn")]
     service = FlashinferMistral(model_id="mistralai/Mistral-7B-v0.3")
-elif test == "qwen2":
-    requests = [make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'base', id=0, promptOverride="给我讲个故事"),
-                make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'lora', id=1, promptOverride="什么是深度学习？")]
+elif test == "qwen1.5":
+    # requests = [make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'base', id=0, promptOverride="给我讲个故事"),
+    #             make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'lora', id=1, promptOverride="什么是深度学习？")]
+
+    requests = [make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'base', id=0, promptOverride="给我讲个故事")]
     
-    service = FlashinferQwen2(model_id='Qwen/Qwen1.5-7B-Chat', lora_ids=['REILX/Qwen1.5-7B-Chat-750Mb-lora'])
-elif test == "qwen2-1.8":
+    # service = FlashinferQwen2(model_id='Qwen/Qwen1.5-7B-Chat', lora_ids=['REILX/Qwen1.5-7B-Chat-750Mb-lora'])
+    service = FlashinferQwen2(model_id='/gpfsnyu/scratch/yx2432/models/qwen1.5-7b-chat', lora_ids=['REILX/Qwen1.5-7B-Chat-750Mb-lora'])
+elif test == "qwen1.5-1.8":
     # Todo: Add qwen1.5 1.8b chat lora adapter / Output Repetition Problem
     requests = [make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'base', id=0, promptOverride="给我讲个故事")]
 
     service = FlashinferQwen2(model_id='Qwen/Qwen1.5-1.8B-Chat',
                            lora_ids=['REILX/Qwen1.5-7B-Chat-750Mb-lora'])
-elif test == "qwen2-70":
+elif test == "qwen1.5-70":
     # Todo: Add qwen1.5 72b chat lora adapter
     requests = [make_input('REILX/Qwen1.5-7B-Chat-750Mb-lora', 'base', id=0, promptOverride="给我讲个故事")]
     
@@ -135,8 +141,22 @@ elif test == "baichuan":
     requests = [make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=0, promptOverride="why is deep learning so popular these days?"),
             make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=1, promptOverride="What are the differences between Manhattan and Brooklyn")]
     service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
+elif test == "qwen2":
+    requests = [make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=0, promptOverride="给我讲个故事")]
 
-print(service.get_lora_adapters())
+    # service = FlashinferLlama(model_id="Qwen/Qwen2-7B-Instruct")
+    service = FlashinferQwen2(model_id="/gpfsnyu/scratch/yx2432/models/qwen2-7b-instruct")
+elif test == 'chatglm':
+    requests = [make_input("abcdabcd987/gsm8k-llama2-7b-lora-16", "base", id=0, promptOverride="给我讲个故事")]
+
+    # service = FlashinferLlama(model_id="Qwen/Qwen2-7B-Instruct")
+    # service = FlashinferChatGLM3(model_id="/gpfsnyu/scratch/yx2432/models/chatglm3-6b")
+
+    ## ChatGLM3-6b and ChatGLM4-9b can both be loaded by FlashinferChatGLM
+    # currently testing ChatGLM4
+    service = FlashinferChatGLM(model_id="/gpfsnyu/scratch/yx2432/models/chatglm4-9b", dtype=torch.float16)
+
+# print(service.get_lora_adapters())
 tokenizer = service.tokenizer
 
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))

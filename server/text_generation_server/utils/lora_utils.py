@@ -302,7 +302,10 @@ class ModelLoraManager:
             ):
         for lora_id in lora_ids:
             if lora_id not in self.lora_weights_cpu:
-                model_path, config_path = load_lora_weights(lora_id)
+                # model_path, config_path = load_lora_weights(lora_id)
+                model_path = '/gpfsnyu/scratch/yx2432/models/qwen1.5-7b-lora/adapter_model.bin'
+                config_path = '/gpfsnyu/scratch/yx2432/models/qwen1.5-7b-lora/adapter_config.json'
+                
                 raw_weights = torch.load(model_path, map_location='cpu', weights_only=True)
                 lora_rank = peft.config.PeftConfigMixin.from_json_file(config_path)['r']
                 lora_weight = ModelLoraWeight(model_config, lora_rank*2, dtype, 'cpu') \
