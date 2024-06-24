@@ -7,9 +7,10 @@ from transformers.models.llama.modeling_llama import (
     LlamaConfig,
 )
 
-from punica_kernels import (
-    rms_norm,
-)
+# from punica_kernels import (
+#     rms_norm,
+# )
+from flashinfer.norm import rmsnorm
 from text_generation_server.layers import (
     TensorParallelRowLinear,
     TensorParallelColumnLinear,
@@ -123,7 +124,7 @@ class FlashLlamaAttention(nn.Module):
         q = q_proj.contiguous()
         k = k_proj.contiguous()
         v = v_proj.contiguous()
-        loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
+        # loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
 
         self.rotary_emb(
             q.view(
@@ -151,9 +152,9 @@ class FlashLlamaAttention(nn.Module):
             self.rotaryParams,
         )
         attn_outputs = self.o_proj(attn_outputs_raw)
-        loraWeight.apply_lora_weight_attn(
-            attn_outputs, attn_outputs_raw, self.layer_idx
-        )
+        # loraWeight.apply_lora_weight_attn(
+        #     attn_outputs, attn_outputs_raw, self.layer_idx
+        # )
         return attn_outputs
 
 
@@ -206,13 +207,13 @@ class LlamaMLP(nn.Module):
         gate_up_states = self.gate_up_proj(hidden_states)
         gate_up_states = gate_up_states.view(-1, 2, self.intermediate_size)
         gate = gate_up_states[:, 0].contiguous()
-        loraWeight.apply_lora_weight_gate(gate, hidden_states, self.layer_idx)
+        # loraWeight.apply_lora_weight_gate(gate, hidden_states, self.layer_idx)
         gate = self.act(gate)
         up = gate_up_states[:, 1].contiguous()
-        loraWeight.apply_lora_weight_up(up, hidden_states, self.layer_idx)
+        # loraWeight.apply_lora_weight_up(up, hidden_states, self.layer_idx)
         t = gate * up
         down = self.down_proj(t)
-        loraWeight.apply_lora_weight_down(down, t, self.layer_idx)
+        # loraWeight.apply_lora_weight_down(down, t, self.layer_idx)
         return down
 
 
@@ -227,7 +228,7 @@ class RMSNorm(nn.Module):
         if residual is not None:
             hidden_states += residual
         residual = hidden_states
-        return rms_norm(hidden_states, self.weight, self.variance_epsilon), residual
+        return rmsnorm(hidden_states, self.weight, self.variance_epsilon), residual
 
 
 class FlashLlamaLayer(nn.Module):
