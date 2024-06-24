@@ -1,19 +1,39 @@
 from text_generation_server.pb import generate_pb2
 import torch
-from text_generation_server.models.flashinfer_llama import FlashinferLlama
-from text_generation_server.models.flashinfer_gemma import FlashinferGemma
+from text_generation_server.models_flashinfer.flashinfer_llama import FlashinferLlama
+from text_generation_server.models_flashinfer.flashinfer_gemma import FlashinferGemma
+import sys
 
 try:
-    from text_generation_server.models.flashinfer_mistral import FlashinferMistral
-    from text_generation_server.models.flashinfer_phi import FlashinferPhi
-    from text_generation_server.models.flashinfer_qwen2 import FlashinferQwen2
+    from text_generation_server.models_flashinfer.flashinfer_mistral import (
+        FlashinferMistral,
+    )
+    from text_generation_server.models_flashinfer.flashinfer_phi import FlashinferPhi
+    from text_generation_server.models_flashinfer.flashinfer_qwen2 import (
+        FlashinferQwen2,
+    )
 except:
     print("can't load flashinfer mistral and phi and qwen2 without flash attn")
 
-from text_generation_server.models.flashinfer_causal_lm import FlashinferBatch
+from text_generation_server.models_flashinfer.flashinfer_causal_lm import (
+    FlashinferBatch,
+)
 from text_generation_server.models.flashinfer_yi import FlashinferYi
 import random, json
 from test_cases import DEMO, LoraSpec
+
+if len(sys.argv) == 2:
+    test = sys.argv[1]
+else:
+    # test = "gemma"
+    # test = "llama-3"
+    # test = 'llama-3-70'
+    test = "llama-2"
+    # test = 'mistral'
+    # test = 'qwen2'
+    # test = 'qwen2-1.8'
+    # test = 'qwen2-70'
+print("Testing " + test)
 
 # Load demo inputs
 lora_specs = {}
@@ -240,7 +260,9 @@ elif test == "baichuan":
             promptOverride="What are the differences between Manhattan and Brooklyn",
         ),
     ]
-    service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
+    service = FlashinferLlama(
+        model_id="baichuan-inc/Baichuan2-7B-Chat", trust_remote_code=True
+    )
 elif test == "yi":
     # service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
     service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
@@ -278,11 +300,13 @@ while True:
     generations, _, _ = service.generate_token(FlashinferBatch.Empty(batch.id))
     for gen in generations:
         if gen.prefill_tokens:
-            prompt = tokenizer.decode(gen.prefill_tokens.token_ids)
-        if gen.generated_text:
             display_results[gen.request_id] = [
-                "Prompt:\n" + prompt + "\nAnswer:\n" + gen.generated_text.text
+                "Prompt:\n"
+                + tokenizer.decode(gen.prefill_tokens.token_ids)
+                + "\nAnswer:\n"
             ]
+        if gen.generated_text:
+            display_results[gen.request_id] += [gen.generated_text.text]
     # Stop if all input generations are done
     if all([g.generated_text for g in generations]):
         break

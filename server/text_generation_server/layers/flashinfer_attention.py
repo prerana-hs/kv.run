@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+import math
 import torch
 import flashinfer
 from text_generation_server.utils.cache_manager_flashinfer import KvCacheBatchPosition
@@ -18,7 +19,7 @@ class AttentionRotaryParams:
     causal: bool = True
     pos_encoding_mode: POS_ENCODING_MODE = POS_ENCODING_MODE.ROPE_LLAMA
     rope_scale: float = 1.0
-    rope_theta: float = 1.0e-4
+    rope_theta: float = 1.0e4
 
 
 def find_padded_head_dim(head_dim):
@@ -150,6 +151,7 @@ class FlashinferAttentionWrapper:
             cacheData,
             causal=rotaryParams.causal,
             pos_encoding_mode=rotaryParams.pos_encoding_mode.value,
+            sm_scale=1.0 / math.sqrt(self.head_dim),
             rope_scale=rotaryParams.rope_scale,
             rope_theta=rotaryParams.rope_theta,
         )
@@ -197,6 +199,7 @@ class FlashinferAttentionWrapper:
             q,
             cacheData,
             pos_encoding_mode=rotaryParams.pos_encoding_mode.value,
+            sm_scale=1.0 / math.sqrt(self.head_dim),
             rope_scale=rotaryParams.rope_scale,
             rope_theta=rotaryParams.rope_theta,
         )
