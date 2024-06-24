@@ -41,7 +41,7 @@ class FlashinferBatch:
         self.kv_last_page_len = kv_last_page_len
 
 
-GemmaTokenizer = None
+YiTokenizer = None
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
@@ -70,10 +70,10 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class GemmaTokenizerFast(PreTrainedTokenizerFast):
+class YiTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    slow_tokenizer_class = GemmaTokenizer
+    slow_tokenizer_class = YiTokenizer
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -198,25 +198,25 @@ class GemmaTokenizerFast(PreTrainedTokenizerFast):
         return output
 
 
-class GemmaConfig(PretrainedConfig):
+class YiConfig(PretrainedConfig):
     def __init__(
         self,
-        vocab_size=256128,
-        hidden_size=3072,
-        intermediate_size=24576,
-        num_hidden_layers=28,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        head_dim=256,
-        hidden_act="gelu",
-        max_position_embeddings=8192,
+        vocab_size=32000,
+        hidden_size=4096,
+        intermediate_size=11008,
+        num_hidden_layers=32,
+        num_attention_heads=32,
+        num_key_value_heads=None,
+        head_dim=128,
+        hidden_act="silu",
+        max_position_embeddings=2048,
         initializer_range=0.02,
-        rms_norm_eps=1e-5,
+        rms_norm_eps=1e-6,
         use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
-        tie_word_embeddings=True,
+        tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
         attention_bias=False,
@@ -256,7 +256,7 @@ class GemmaConfig(PretrainedConfig):
         )
 
 
-class GemmaRMSNorm(nn.Module):
+class YiRMSNorm(nn.Module):
     def __init__(self, prefix, weights, eps=1e-6):
         super().__init__()
         weight = weights.get_tensor(f"{prefix}.weight") + 1
@@ -308,12 +308,12 @@ def _load_gqa(config, prefix: str, weights):
     )
 
 
-class FlashGemmaAttention(nn.Module):
+class FlashYiAttention(nn.Module):
     def __init__(
         self,
         prefix: str,
         flashinferWrapper: FlashinferAttentionWrapper,
-        config: GemmaConfig,
+        config: YiConfig,
         weights,
         layer_idx: int,
     ):
@@ -355,7 +355,7 @@ class FlashGemmaAttention(nn.Module):
         q = q_proj.contiguous()
         k = k_proj.contiguous()
         v = v_proj.contiguous()
-        loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
+        # loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
         attn_outputs_raw = self.flashinferWrapper.computeAttention(
             q,
             k,
@@ -367,13 +367,14 @@ class FlashGemmaAttention(nn.Module):
             self.rotaryParams,
         )
         attn_outputs = self.o_proj(attn_outputs_raw)
-        loraWeight.apply_lora_weight_attn(
-            attn_outputs, attn_outputs_raw, self.layer_idx
-        )
+
+        # loraWeight.apply_lora_weight_attn(
+        #     attn_outputs, attn_outputs_raw, self.layer_idx
+        # )
         return attn_outputs
 
 
-class GemmaMLP(nn.Module):
+class YiMLP(nn.Module):
     def __init__(self, prefix, config, weights, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
@@ -410,37 +411,37 @@ class GemmaMLP(nn.Module):
         gate_up_states = self.gate_up_proj(hidden_states)
         gate_up_states = gate_up_states.view(-1, 2, self.intermediate_size)
         gate = gate_up_states[:, 0].contiguous()
-        loraWeight.apply_lora_weight_gate(gate, hidden_states, self.layer_idx)
+        # loraWeight.apply_lora_weight_gate(gate, hidden_states, self.layer_idx)
         gate = self.act(gate)
         up = gate_up_states[:, 1].contiguous()
-        loraWeight.apply_lora_weight_up(up, hidden_states, self.layer_idx)
+        # loraWeight.apply_lora_weight_up(up, hidden_states, self.layer_idx)
         t = gate * up
         down = self.down_proj(t)
-        loraWeight.apply_lora_weight_down(down, t, self.layer_idx)
+        # loraWeight.apply_lora_weight_down(down, t, self.layer_idx)
         return down
 
 
-class FlashGemmaLayer(nn.Module):
+class FlashYiLayer(nn.Module):
     def __init__(
         self, flashinferWrapper: FlashinferAttentionWrapper, layer_id, config, weights
     ):
         super().__init__()
         prefix = f"model.layers.{layer_id}"
-        self.self_attn = FlashGemmaAttention(
+        self.self_attn = FlashYiAttention(
             prefix=f"{prefix}.self_attn",
             flashinferWrapper=flashinferWrapper,
             config=config,
             weights=weights,
             layer_idx=layer_id,
         )
-        self.mlp = GemmaMLP(
+        self.mlp = YiMLP(
             prefix=f"{prefix}.mlp", config=config, weights=weights, layer_idx=layer_id
         )
 
-        self.input_layernorm = GemmaRMSNorm(
+        self.input_layernorm = YiRMSNorm(
             prefix=f"{prefix}.input_layernorm", weights=weights, eps=config.rms_norm_eps
         )
-        self.post_attention_layernorm = GemmaRMSNorm(
+        self.post_attention_layernorm = YiRMSNorm(
             prefix=f"{prefix}.post_attention_layernorm",
             weights=weights,
             eps=config.rms_norm_eps,
@@ -473,7 +474,7 @@ class FlashGemmaLayer(nn.Module):
         return mlp_output, attn_res
 
 
-class FlashGemmaModel(torch.nn.Module):
+class FlashYiModel(torch.nn.Module):
     def __init__(self, config, weights):
         super().__init__()
 
@@ -497,7 +498,7 @@ class FlashGemmaModel(torch.nn.Module):
 
         self.layers = nn.ModuleList(
             [
-                FlashGemmaLayer(
+                FlashYiLayer(
                     flashinferWrapper,
                     layer_id,
                     config,
@@ -506,7 +507,7 @@ class FlashGemmaModel(torch.nn.Module):
                 for layer_id in range(config.num_hidden_layers)
             ]
         )
-        self.norm = GemmaRMSNorm(
+        self.norm = YiRMSNorm(
             prefix="model.norm", weights=weights, eps=config.rms_norm_eps
         )
 
@@ -537,11 +538,11 @@ class FlashGemmaModel(torch.nn.Module):
         return hidden_states
 
 
-class FlashGemmaForCausalLM(torch.nn.Module):
+class FlashYiForCausalLM(torch.nn.Module):
     def __init__(self, config, weights):
         super().__init__()
 
-        self.model = FlashGemmaModel(config, weights)
+        self.model = FlashYiModel(config, weights)
         self.lm_head = SpeculativeHead.load(
             config,
             prefix="model.embed_tokens" if config.tie_word_embeddings else "lm_head",
