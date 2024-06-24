@@ -1,15 +1,15 @@
 import torch
 import torch.distributed
 from typing import Optional, List
-from text_generation_server.models.flashinfer_causal_lm import FlashinferLM
+from text_generation_server.models_flashinfer.flashinfer_causal_lm import FlashinferLM
 
-from text_generation_server.models.custom_modeling.flashinfer_yi_modeling import (
-    YiTokenizerFast,
-    YiConfig,
-    FlashYiForCausalLM,
-)
+# from text_generation_server.models.custom_modeling.flashinfer_yi_modeling import (
+#     YiTokenizerFast,
+#     YiConfig,
+#     FlashYiForCausalLM,
+# )
 from transformers import AutoConfig, AutoTokenizer, GenerationConfig
-from text_generation_server.models.custom_modeling.flashinfer_llama_modeling import (
+from text_generation_server.models_flashinfer.custom_modeling.flashinfer_llama_modeling import (
     FlashLlamaForCausalLM
 )
 from text_generation_server.utils import (

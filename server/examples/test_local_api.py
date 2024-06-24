@@ -3,6 +3,7 @@ import torch
 <<<<<<< HEAD
 from text_generation_server.models_flashinfer.flashinfer_llama import FlashinferLlama
 from text_generation_server.models_flashinfer.flashinfer_gemma import FlashinferGemma
+from text_generation_server.models.flashinfer_yi import FlashinferYi
 import sys
 
 try:
@@ -42,6 +43,7 @@ else:
     # test = 'qwen2'
     # test = 'qwen2-1.8'
     # test = 'qwen2-70'
+    # test = 'yi'
 print("Testing " + test)
 
 # Load demo inputs
@@ -283,16 +285,16 @@ elif test == "baichuan":
 =======
     service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
 elif test == "yi":
-    # service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
-    service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    # service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
 
     requests = [
-        # make_input(
-        #     "/scratch/hy2203/models/01-ai/Yi-6B",
-        #     "base",
-        #     id=0,
-        #     promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
-        # ),
+        make_input(
+            "/scratch/hy2203/models/01-ai/Yi-6B",
+            "base",
+            id=0,
+            promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
+        ),
         # make_input(
         #     "/scratch/hy2203/models/01-ai/Yi-6B",
         #     "lora",

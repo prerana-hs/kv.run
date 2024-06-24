@@ -7,9 +7,10 @@ from transformers.models.llama.modeling_llama import (
     LlamaConfig,
 )
 
-from punica_kernels import (
-    rms_norm,
-)
+# from punica_kernels import (
+#     rms_norm,
+# )
+from flashinfer.norm import rmsnorm
 from text_generation_server.layers import (
     TensorParallelRowLinear,
     TensorParallelColumnLinear,
@@ -227,7 +228,7 @@ class RMSNorm(nn.Module):
         if residual is not None:
             hidden_states += residual
         residual = hidden_states
-        return rms_norm(hidden_states, self.weight, self.variance_epsilon), residual
+        return rmsnorm(hidden_states, self.weight, self.variance_epsilon), residual
 
 
 class FlashLlamaLayer(nn.Module):
