@@ -265,16 +265,16 @@ elif test == "baichuan":
     )
     service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
 elif test == "yi":
-    service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
-    # service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    # service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
+    service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
 
     requests = [
-        make_input(
-            "/scratch/hy2203/models/01-ai/Yi-6B",
-            "base",
-            id=0,
-            promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
-        ),
+        # make_input(
+        #     "/scratch/hy2203/models/01-ai/Yi-6B",
+        #     "base",
+        #     id=0,
+        #     promptOverride="Let me tell you an interesting story about cat Tom and mouse Jerry,",
+        # ),
         # make_input(
         #     "/scratch/hy2203/models/01-ai/Yi-6B",
         #     "lora",
