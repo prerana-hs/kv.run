@@ -1,10 +1,8 @@
 from text_generation_server.pb import generate_pb2
 import torch
-<<<<<<< HEAD
 from text_generation_server.models_flashinfer.flashinfer_llama import FlashinferLlama
 from text_generation_server.models_flashinfer.flashinfer_gemma import FlashinferGemma
-from text_generation_server.models.flashinfer_yi import FlashinferYi
-from text_generation_server.models.flashinfer_yi import FlashinferYi
+from text_generation_server.models_flashinfer.flashinfer_yi import FlashinferYi
 import sys
 
 try:
@@ -21,15 +19,6 @@ except:
 from text_generation_server.models_flashinfer.flashinfer_causal_lm import (
     FlashinferBatch,
 )
-=======
-from text_generation_server.models.flashinfer_llama import FlashinferLlama
-from text_generation_server.models.flashinfer_gemma import FlashinferGemma
-from text_generation_server.models.flashinfer_mistral import FlashinferMistral
-from text_generation_server.models.flashinfer_phi import FlashinferPhi
-from text_generation_server.models.flashinfer_qwen2 import FlashinferQwen2
-from text_generation_server.models.flashinfer_causal_lm import FlashinferBatch
-from text_generation_server.models.flashinfer_yi import FlashinferYi
->>>>>>> a174cc2 (update from master)
 import random, json
 from test_cases import DEMO, LoraSpec
 
@@ -86,37 +75,18 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
     )
     return request
 
-<<<<<<< HEAD
-# test = 'gemma'
-# test = 'llama-3'
-test = 'llama-2'
-# test = 'mistral'
-=======
-
-# test = "gemma"
-# test = 'llama-3'
-# test = 'llama-3-70'
-# test = 'llama-2'
-# test = 'mistral'
-# test = 'qwen2'
-# test = 'qwen2-1.8'
-# test = 'qwen2-70'
-test = 'yi'
->>>>>>> a174cc2 (update from master)
 
 if test == "llama-2":
     # Load model
-    # service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
-    #                        lora_ids=['abcdabcd987/gsm8k-llama2-7b-lora-16'])
-    # service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
-    #                       lora_ids=['/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16'])
-    service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf")
+    service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
+                          lora_ids=['/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16'])
+    # service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf")
 
     # Create an input batch of two queries
-    # requests = [make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
-    #             make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
+    requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
+                make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
     # 
-    requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?")]
+    # requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?")]
 elif test == 'llama-3':
     # Load model
     service = FlashinferLlama(
@@ -279,7 +249,6 @@ elif test == "baichuan":
             promptOverride="What are the differences between Manhattan and Brooklyn",
         ),
     ]
-<<<<<<< HEAD
     service = FlashinferLlama(
         model_id="baichuan-inc/Baichuan2-7B-Chat", trust_remote_code=True
     )
