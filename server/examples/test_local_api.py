@@ -2,7 +2,7 @@ from text_generation_server.pb import generate_pb2
 import torch
 from text_generation_server.models_flashinfer.flashinfer_llama import FlashinferLlama
 from text_generation_server.models_flashinfer.flashinfer_gemma import FlashinferGemma
-from text_generation_server.models.flashinfer_yi import FlashinferYi
+from text_generation_server.models_flashinfer.flashinfer_yi import FlashinferYi
 import sys
 
 try:
