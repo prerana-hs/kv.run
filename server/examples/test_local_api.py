@@ -4,6 +4,7 @@ import torch
 from text_generation_server.models_flashinfer.flashinfer_llama import FlashinferLlama
 from text_generation_server.models_flashinfer.flashinfer_gemma import FlashinferGemma
 from text_generation_server.models.flashinfer_yi import FlashinferYi
+from text_generation_server.models.flashinfer_yi import FlashinferYi
 import sys
 
 try:
@@ -105,15 +106,17 @@ test = 'yi'
 
 if test == "llama-2":
     # Load model
-    service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
-                          lora_ids=['/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16'])
-    # service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf")
+    # service = FlashinferLM(model_type="llama", model_id="meta-llama/Llama-2-7b-hf",
+    #                        lora_ids=['abcdabcd987/gsm8k-llama2-7b-lora-16'])
+    # service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf",
+    #                       lora_ids=['/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16'])
+    service = FlashinferLlama(model_id="/scratch/hy2203/models/tjluyao/llama-2-7b-hf")
 
     # Create an input batch of two queries
-    requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
-                make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
+    # requests = [make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?"),
+    #             make_input('abcdabcd987/gsm8k-llama2-7b-lora-16', 'lora', id=1, promptOverride="Which network interface card is more suitable for distributed systems, Meallanox or Broadcom?")]
     # 
-    # requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?")]
+    requests = [make_input('/scratch/hy2203/models/abcdabcd987/gsm8k-llama2-7b-lora-16', 'base', id=0, promptOverride= "Give me a breif introduction to Byznatine Fault Tolerance and why it is important?")]
 elif test == 'llama-3':
     # Load model
     service = FlashinferLlama(
@@ -280,8 +283,6 @@ elif test == "baichuan":
     service = FlashinferLlama(
         model_id="baichuan-inc/Baichuan2-7B-Chat", trust_remote_code=True
     )
-=======
-    service = FlashinferLlama(model_id="baichuan-inc/Baichuan2-7B-Chat")
 elif test == "yi":
     service = FlashinferYi(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
     # service = FlashinferLlama(model_id="/scratch/hy2203/models/01-ai/Yi-6B")
@@ -301,7 +302,6 @@ elif test == "yi":
         # ),
     ]
     
->>>>>>> a174cc2 (update from master)
 
 print(service.get_lora_adapters())
 tokenizer = service.tokenizer
