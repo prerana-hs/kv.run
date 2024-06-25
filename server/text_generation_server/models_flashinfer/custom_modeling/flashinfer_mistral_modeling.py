@@ -37,14 +37,8 @@ from typing import Optional, List, Tuple
 from tokenizers import processors
 from transformers.utils import logging
 
-<<<<<<< HEAD:server/text_generation_server/models_flashinfer/custom_modeling/flashinfer_mistral_modeling.py
-<<<<<<< HEAD:server/text_generation_server/models_flashinfer/custom_modeling/flashinfer_mistral_modeling.py
-=======
+
 # from text_generation_server.utils import paged_attention, flash_attn
->>>>>>> ea7b3b1 (.):server/text_generation_server/models/custom_modeling/flashinfer_mistral_modeling.py
-=======
-# from text_generation_server.utils import paged_attention, flash_attn
->>>>>>> ea7b3b1 (.):server/text_generation_server/models/custom_modeling/flashinfer_mistral_modeling.py
 from text_generation_server.layers import (
     TensorParallelRowLinear,
     TensorParallelColumnLinear,

@@ -120,87 +120,6 @@ Note: L = Language, I = Image
 | [Mpt](https://huggingface.co/mosaicml/mpt-7b-instruct)                       |     | 7B    | L ⇒ L    |              |                    |            |            |
 | [Gpt2](https://huggingface.co/openai-community/gpt2)                         |     | 124M  | L ⇒ L    |              |                    |            |            |
 | [Gpt Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)                   |     | 20B   | L ⇒ L    |              | ✔                  |            |            |
-=======
-# kv.run
-(Limited) comparison of popular model serving solutions
-
-| Solution        | Inference backend | Serving backend      | Advanced kernel support                                                                          | Model support              |  
-|-----------------|-------------------|----------------------|--------------------------------------------------------------------------------------------------|----------------------------|
-| Huggingface TGI | Pytorch           | HF TGI (Rust)        | Paged + Flash attention                                                                          | Language                   | 
-| Deepspeed MII   | PyTorch           | Deepspeed (Python)   | [DeepSpeed-Kernels](https://github.com/microsoft/DeepSpeed-Kernels)                              | Language                   |
-| TensorRT-LLM    | TensorRT-LLM      | TensorRT-LLM (C++)   | [TensorRT XQA](https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/blogs/XQA-kernel.md) | Language                   |
-| vLLM            | vLLM              | vLLM (Python)        | Paged + Flash attention                                                                          | Language                   |
-| kv.run          | PyTorch           | HF TGI + more (Rust) | Paged + Flash attention, [FlashInfer](https://github.com/flashinfer-ai/flashinfer)               | Language, diffusion (exp.) |
-
- 
-
-## Installation
-#### Sync submodules
-```shell
-git submodule sync
-git submodule update --init
-```
-
-#### Install Rust
-[Script](https://rustup.rs/):
-```shell
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-#### Install Protobuf
-```shell
-sudo apt-get install libssl-dev gcc -y
-PROTOC_ZIP=protoc-21.12-linux-x86_64.zip
-curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.12/$PROTOC_ZIP
-sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
-sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
-rm -f $PROTOC_ZIP
-```
-
-#### Build Code Base
-```shell
-make install
-```
-
-#### Install Kernel Libraries
-```shell
-# Install FlashInfer
-# For CUDA 12.1 & torch 2.3
-pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3
-# For other CUDA & torch versions, please check https://docs.flashinfer.ai/installation.html
-
-# Install Flash and Paged Attention
-cd build/server 
-make install-flash-attention & make install-vllm-cuda
-```
-You can debug/edit code in the build folder. When done, use python copy_back.py to copy changes back to the original src folder.
-
-## Usages
-#### Local API tests
-```shell
-cd build/server/examples & python test_local_api.py
-```
-#### Deploy services
-```shell
-text-generation-launcher --model-id tjluyao/llama-3-8b --lora-ids tjluyao/llama-3-8b-math;tjluyao/llama-3-8b-zh
-```
-#### Using quantized models
-Add --quantize [Method] to the command above, for example:
-```shell
-text-generation-launcher --model-id TechxGenus/gemma-2b-GPTQ --lora-ids tjluyao/gemma-2b-it-math --quantize gptq
-```
-The supported quantization methods include: 
-- AWQ: 4-bit. Need specific quantized model. 
-- EETQ: 8-bit. Can work for any model. 
-- GPTQ: 4-bit. Need specific quantized model.
-- Bitandbytes: 8-bit. Can work for any model.
-
-For AWQ and EETQ quantization, you need to build their specific kernels: 
-```shell
-# AWQ
-cd build/server & make install-awq
-# EETQ
-cd build/server & make install-eetq
-```
 
 ## Model support matrix
 Note: L = Language, I = Image
@@ -233,10 +152,6 @@ Note: L = Language, I = Image
 | [Mpt](https://huggingface.co/mosaicml/mpt-7b-instruct)                       |     | 7B    | L ⇒ L    |              |                    |            |            |
 | [Gpt2](https://huggingface.co/openai-community/gpt2)                         |     | 124M  | L ⇒ L    |              |                    |            |            |
 | [Gpt Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)                   |     | 20B   | L ⇒ L    |              | ✔                  |            |            |
-=======
-```bash
-HF_HUB_ENABLE_HF_TRANSFER=1 pytest -s -vv --disable-pytest-warnings -m "punica_test" build/server/tests
-```
 
 # Single Device Multi-GPU Support
 
@@ -246,6 +161,10 @@ server is called by cli
 <img width="618" alt="截屏2024-03-31 03 51 00" src="https://github.com/nativ-ai/torch-MIL/assets/104136162/f565447c-000f-4b29-b504-8f4294c4bdd9">
 <img width="666" alt="截屏2024-03-31 03 51 29" src="https://github.com/nativ-ai/torch-MIL/assets/104136162/91463205-bf77-48df-9d12-71460a3986f1">
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3931d2a (solve lora issue)
 pb folder files are automated generaeted by gRPC, in the case of TGI, use
 ```bash
 cd /torch-MIL/third_party/text-generation-inference/server
@@ -357,13 +276,58 @@ class FlashLlamaAttention(torch.nn.Module):
             bias=False,
         )
 
+
+**QKV**: FlashLlamaAttention()@models/custom_modeling/flash_llama_modeling.py: 171  `self.query_key_value = load_attention(config, prefix, weights)`
+-> 
+load_attention()@models/custom_modeling/flash_llama_modeling.py: 105 `return TensorParallelColumnLinear.load_multi()`
+
+**B**: FlashLlamaAttention()@models/custom_modeling/flash_llama_modeling.py: 173 `self.o_proj = TensorParallelRowLinear.load()`
         self.num_groups = self.num_heads // self.num_key_value_heads
         self.kv_head_mapping = torch.arange(
             0, self.num_key_value_heads, dtype=torch.int32, device=weights.device
         ).repeat_interleave(self.num_groups)
-
 ```
 
+
+#### FeedForward
+![image](https://github.com/kvrun/Model-Serving/assets/104136162/79b01fb7-e664-41f1-8bc1-186d48e7e9fc)
+
+``` python
+# LlamaMLP() @models/custom_modeling/flash_llama_modeling.py
+class LlamaMLP(nn.Module):
+    def __init__(self, prefix, config, weights):
+        super().__init__()
+        act = config.hidden_act
+        self.act = (
+            ACT2FN[act]
+            if "gelu" not in act
+            else lambda x: torch.nn.functional.gelu(
+                x,
+                approximate=(
+                    "tanh" if act in ["gelu_fast", "gelu_pytorch_tanh"] else "none"
+                ),
+            )
+        )
+        # Fuse gate and up proj, A is dealt here
+        self.gate_up_proj = TensorParallelColumnLinear.load_multi(
+            config,
+            prefixes=[f"{prefix}.gate_proj", f"{prefix}.up_proj"],
+            weights=weights,
+            dim=0,
+            bias=False,
+        )
+        # B is dealt here
+        self.down_proj = TensorParallelRowLinear.load(
+            config,
+            prefix=f"{prefix}.down_proj",
+            weights=weights,
+            bias=False,
+        )
+        self.intermediate_size = (
+            config.intermediate_size // weights.process_group.size()
+        )
+
+```
 
 #### FeedForward
 ![image](https://github.com/kvrun/Model-Serving/assets/104136162/79b01fb7-e664-41f1-8bc1-186d48e7e9fc)
