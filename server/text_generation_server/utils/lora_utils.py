@@ -304,8 +304,6 @@ def load_lora_weights(lora_id):
     config_path = hf_hub_download(lora_id, filename="adapter_config.json")
     return model_path, config_path
 
-<<<<<<< HEAD
-=======
 def load_lora_weights_local(lora_id):
     # load lora weights from local
     try:
@@ -319,7 +317,6 @@ def load_lora_weights_local(lora_id):
     config_path = lora_id + '/adapter_config.json'
     print(f"model_path: {model_path}, config_path: {config_path}")
     return model_path, config_path
->>>>>>> ea7b3b1 (.)
 
 class ModelLoraManager:
     def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap=32):
@@ -339,8 +336,11 @@ class ModelLoraManager:
     ):
         for lora_id in lora_ids:
             if lora_id not in self.lora_weights_cpu:
-<<<<<<< HEAD
                 model_path, config_path = load_lora_weights(lora_id)
+                try:
+                    model_path, config_path = load_lora_weights(lora_id)
+                except:
+                    model_path, config_path = load_lora_weights_local(lora_id)
                 raw_weights = torch.load(
                     model_path, map_location="cpu", weights_only=True
                 )
@@ -350,7 +350,6 @@ class ModelLoraManager:
                     if lora_rank < 16
                     else ModelLoraWeight(model_config, lora_rank, dtype, "cpu")
                 )
-=======
                 # model_path, config_path = load_lora_weights(lora_id)
                 model_path, config_path = load_lora_weights_local(lora_id)
                 raw_weights = torch.load(model_path, map_location='cpu', weights_only=True)
@@ -358,17 +357,11 @@ class ModelLoraManager:
                 lora_weight = ModelLoraWeight(model_config, lora_rank*2, dtype, 'cpu') \
                               if lora_rank < 16 \
                               else ModelLoraWeight(model_config, lora_rank, dtype, 'cpu')
->>>>>>> ea7b3b1 (.)
                 converted_weights = self.__convert_weight(raw_weights, lora_rank)
                 lora_weight.copy_from_tensors(converted_weights)
                 del converted_weights
                 self.lora_weights_cpu[lora_id] = lora_weight
-<<<<<<< HEAD
                 logger.info(f"{lora_id} loaded in cpu memory!")
-=======
-                print(self.lora_weights_cpu)
-                logger.info(f'{lora_id} loaded in cpu memory!')
->>>>>>> ea7b3b1 (.)
 
     def remove_lora_weights(self, lora_ids: List[str] = None):
         if (not lora_ids) or (lora_ids == "") or (lora_ids == "all"):
