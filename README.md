@@ -101,7 +101,22 @@ curl 127.0.0.1:3000/generate -X POST -d '{"inputs":"What is Deep Learning?","par
 ```
 
 ## Benchmarks
+Testing Llama-2-7b on RTX 6000 ada:
 
+| Step    | Batch Size | Average FlashInfer  | Average TGI         | 
+|---------|------------|---------------------|---------------------|
+| Prefill | 1          | 52.16 tokens/secs   | 41.14 tokens/secs   |
+|         | 2          | 101.64 tokens/secs  | 78.69 tokens/secs  |
+|         | 4          | 191.48 tokens/secs  | 154.11 tokens/secs  |
+|         | 8          | 323.21 tokens/secs  | 290.82 tokens/secs  |
+|         | 16         | 512.50 tokens/secs  | 538.15 tokens/secs  |
+|         | 32         | 697.89 tokens/secs  | 783.61 tokens/secs  |
+| Decode  | 1          | 56.55 tokens/secs   | 40.84 tokens/secs   |
+|         | 2          | 108.55 tokens/secs  | 77.85 tokens/secs  |
+|         | 4          | 207.10 tokens/secs  | 154.27 tokens/secs  | 
+|         | 8          | 383.92 tokens/secs  | 297.53 tokens/secs  |
+|         | 16         | 682.78 tokens/secs  | 562.83 tokens/secs  |
+|         | 32         | 1119.92 tokens/secs | 993.33 tokens/secs |
 
 ## Model and kernel support matrix
 Note: L = Language, I = Image
