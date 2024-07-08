@@ -1,25 +1,19 @@
 # kv.run
 (Limited) comparison of popular model serving solutions
 
-| Solution        | Inference backend | Serving backend      | Advanced kernel support                                                                          | Model support              |
-|-----------------|-------------------|----------------------|--------------------------------------------------------------------------------------------------|----------------------------|
-| Huggingface TGI | Pytorch           | HF TGI (Rust)        | Paged + Flash attention                                                                          | Language                   |
-| Deepspeed MII   | PyTorch           | Deepspeed (Python)   | [DeepSpeed-Kernels](https://github.com/microsoft/DeepSpeed-Kernels)                              | Language                   |
-| TensorRT-LLM    | TensorRT-LLM      | TensorRT-LLM (C++)   | [TensorRT XQA](https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/blogs/XQA-kernel.md) | Language                   |
-| vLLM            | vLLM              | vLLM (Python)        | Paged + Flash attention                                                                          | Language                   |
-| kv.run          | PyTorch           | HF TGI + more (Rust) | Paged + Flash attention, [FlashInfer](https://github.com/flashinfer-ai/flashinfer)               | Language, diffusion (exp.) |
+| Solution        | Inference backend | Serving backend      | Advanced kernel support                                                                          | Model support               |
+|-----------------|-------------------|----------------------|--------------------------------------------------------------------------------------------------|-----------------------------|
+| Huggingface TGI | Pytorch           | HF TGI (Rust)        | Paged + Flash attention                                                                          | Language                    |
+| Deepspeed MII   | PyTorch           | Deepspeed (Python)   | [DeepSpeed-Kernels](https://github.com/microsoft/DeepSpeed-Kernels)                              | Language                    |
+| TensorRT-LLM    | TensorRT-LLM      | TensorRT-LLM (C++)   | [TensorRT XQA](https://github.com/NVIDIA/TensorRT-LLM/blob/main/docs/source/blogs/XQA-kernel.md) | Language                    |
+| vLLM            | vLLM              | vLLM (Python)        | Paged + Flash attention                                                                          | Language                    |
+| kv.run          | PyTorch           | HF TGI + more (Rust) | Paged + Flash attention, [FlashInfer](https://github.com/flashinfer-ai/flashinfer)               | Language, diffusion (soon) |
 
 
 
 ## Installation
-#### Sync submodules
-```shell
-git submodule sync
-git submodule update --init
-```
 
-#### Install Rust
-[Script](https://rustup.rs/):
+#### Install [Rust](https://rustup.rs/):
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -33,23 +27,24 @@ sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
 ```
 
+#### Install Kernel Libraries
+```shell
+# Install FlashInfer
+# For CUDA 12.1 & torch 2.3
+pip install flashinfer=0.0.8 -i https://flashinfer.ai/whl/cu121/torch2.3
+# For other CUDA & torch versions, please check https://docs.flashinfer.ai/installation.html
+
+# Install Flash and Paged Attention
+cd server && make install-flash-attention && make install-vllm-cuda
+```
+
 #### Build Code Base
 ```shell
 make install
 ```
 
-#### Install Kernel Libraries
-```shell
-# Install FlashInfer
-# For CUDA 12.1 & torch 2.3
-pip install flashinfer -i https://flashinfer.ai/whl/cu121/torch2.3
-# For other CUDA & torch versions, please check https://docs.flashinfer.ai/installation.html
-
-# Install Flash and Paged Attention
-cd server
-make install-flash-attention && make install-vllm-cuda
-```
-You can debug/edit code in the build folder. When done, use python copy_back.py to copy changes back to the original src folder.
+#### Build Docker Image (optional)
+`Dockerfile_kvrun` provides a docker image building script. We will provide pre-built docker images shortly. 
 
 ## Usages
 #### Local API tests
@@ -58,12 +53,14 @@ cd server/examples && python test_local_api.py
 ```
 #### Local UI demo
 (Inherited from [Punica](https://github.com/punica-ai/punica))
-
+```shell
+python server/examples/test_ui.py
+```
 [demo.mp4](https://github.com/mlsys-io/kv.run/assets/12567967/977b09fb-bd90-4757-85ab-e5fc2a58cd93)
 
 #### Deploy services
 ```shell
-text-generation-launcher --model-id tjluyao/llama-3-8b --lora-ids tjluyao/llama-3-8b-math;tjluyao/llama-3-8b-zh
+text-generation-launcher --model-id tjluyao/llama-3-8b
 ```
 #### Using quantized models
 Add --quantize [Method] to the command above, for example:
@@ -89,34 +86,54 @@ git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ
 pip install -vvv --no-build-isolation -e .
 ```
 
-## Model support matrix
+#### Multi-LoRA support
+- To load LoRA adapters, you may either (1) specify in the laucher argument using `lora-ids`:
+```shell
+text-generation-launcher --model-id tjluyao/llama-3-8b --lora-ids tjluyao/llama-3-8b-math;tjluyao/llama-3-8b-zh
+```
+Or, loading dynamically by the client after the model is launched: 
+```shell
+curl 127.0.0.1:3000/download_lora_adapter -X POST -d '{"lora_id":"tjluyao/llama-3-8b-math"}' -H 'Content-Type: application/json'
+```
+- To query the model, similarly you can use `lora-id` in the parameters (make sure the adapter is loaded): 
+```shell
+curl 127.0.0.1:3000/generate -X POST -d '{"inputs":"What is Deep Learning?","parameters":{"lora_id": "tjluyao/llama-3-8b-math", "max_new_tokens":20}}' -H 'Content-Type: application/json' 
+```
+
+## Benchmarks
+
+
+## Model and kernel support matrix
 Note: L = Language, I = Image
 
-| Model                                                                        | MOE  | Size  | Modality | Quantization | Tensor Parallelism | FlashInfer | Multi-LoRA |
-|------------------------------------------------------------------------------|------|-------|----------|--------------|--------------------|------------|------------|
-| [Idefics](https://huggingface.co/HuggingFaceM4/idefics-9b)                   |     | 9B    | L, I ⇒ L |              |                    |            |            |
-| [Idefics 2](https://huggingface.co/HuggingFaceM4/idefics2-8b)                |     | 8B    | L, I ⇒ L |              |                    |            |            |
-| [Llava Next (1.6)](https://huggingface.co/llava-hf/llava-v1.6-vicuna-13b-hf) |     | 13B   | L, I ⇒ L |              |                    |            |            |
-| [Llama 2](https://huggingface.co/meta-llama/Llama-2-7b-hf)                   |     | 7B    | L ⇒ L    |              |                    | ✔          | ✔          |
-| [Llama 3](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct)        |     | 8B    | L ⇒ L    |              |                    | ✔          | ✔          |
-| [Phi 1.5](https://huggingface.co/microsoft/phi-1_5)                          |     | 1.3B  | L ⇒ L    |              |                    |            |            |
-| [Phi 3](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct)             |     | 3.8B  | L ⇒ L    |              |                    |            |            |
-| [Gemma](https://huggingface.co/google/gemma-2b)                              |     | 2B    | L ⇒ L    |              |                    | ✔          | ✔          |
-| [Cohere](https://huggingface.co/CohereForAI/c4ai-command-r-plus)             |     | 104B  | L ⇒ L    |              |                    |            |            |
-| [Dbrx](https://huggingface.co/databricks/dbrx-instruct)                      | ✔    | 132B  | L ⇒ L   |              |                    |            |            |
-| [Mamba](https://huggingface.co/state-spaces/mamba-2.8b-slimpj)               |     | 2.8B  | L ⇒ L    |              |                    |            |            |
-| [Mistral](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)         |     | 7B    | L ⇒ L    |              |                    |            |            |
-| [Mixtral](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1)      | ✔    | 8x22B | L ⇒ L   |              |                    |            |            |
-| [Gpt Bigcode](https://huggingface.co/bigcode/gpt_bigcode-santacoder)         |     | 1.1B  | L ⇒ L    |              |                    |            |            |
-| [Baichuan](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)            |     | 7B    | L ⇒ L    |              |                    |            |            |
-| [Falcon](https://huggingface.co/tiiuae/falcon-7b-instruct)                   |     | 7B    | L ⇒ L    |              | ✔                  |            |            |
-| [StarCoder 2](https://huggingface.co/bigcode/starcoder2-15b-instruct-v0.1)   |     | 15B   | L ⇒ L    |              |                    |            |            |
-| [Qwen 2](https://huggingface.co/bigcode/starcoder2-15b-instruct-v0.1)        |     | 15B   | L ⇒ L    |              |                    |            |            |
-| [Opt](https://huggingface.co/facebook/opt-6.7b)                              |     | 6.7B  | L ⇒ L    |              |                    |            |            |
-| [T5](https://huggingface.co/google-t5/t5-11b)                                |     | 11B   | L ⇒ L    |              |                    |            |            |
-| [Galactica](https://huggingface.co/facebook/galactica-120b)                  |     | 120B  | L ⇒ L    |              |                    |            |            |
-| [SantaCoder](https://huggingface.co/bigcode/santacoder)                      |     | 1.1B  | L ⇒ L    |              |                    |            |            |
-| [Bloom](https://huggingface.co/bigscience/bloom-560m)                        |     | 560M  | L ⇒ L    |              |                    |            |            |
-| [Mpt](https://huggingface.co/mosaicml/mpt-7b-instruct)                       |     | 7B    | L ⇒ L    |              |                    |            |            |
-| [Gpt2](https://huggingface.co/openai-community/gpt2)                         |     | 124M  | L ⇒ L    |              |                    |            |            |
-| [Gpt Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)                   |     | 20B   | L ⇒ L    |              | ✔                  |            |            |
+| Model                                                                        | MOE | Size  | Modality | Flash & Page Attention | FlashInfer |
+|------------------------------------------------------------------------------|-----|-------|----------|---------------------|------------|
+| [Idefics](https://huggingface.co/HuggingFaceM4/idefics-9b)                   |     | 9B    | L, I ⇒ L | ✔                   |            |            
+| [Idefics 2](https://huggingface.co/HuggingFaceM4/idefics2-8b)                |     | 8B    | L, I ⇒ L | ✔                   |            |            
+| [Llava Next (1.6)](https://huggingface.co/llava-hf/llava-v1.6-vicuna-13b-hf) |     | 13B   | L, I ⇒ L | ✔                   |            |            
+| [Llama 2](https://huggingface.co/meta-llama/Llama-2-7b-hf)                   |     | 7B    | L ⇒ L   | ✔                   | ✔          |           
+| [Llama 3](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct)        |     | 8B    | L ⇒ L   | ✔                   | ✔          |           
+| [Phi 1.5](https://huggingface.co/microsoft/phi-2)                            |     | 2.7B  | L ⇒ L   | ✔                   |            |            
+| [Phi 3](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct)             |     | 3.8B  | L ⇒ L   | ✔                   | ✔          |               
+| [Gemma](https://huggingface.co/google/gemma-2b)                              |     | 2B    | L ⇒ L   | ✔                   | ✔          |           
+| [Cohere](https://huggingface.co/CohereForAI/c4ai-command-r-plus)             |     | 104B  | L ⇒ L   | ✔                   |            |            
+| [Dbrx](https://huggingface.co/databricks/dbrx-instruct)                      | ✔   | 132B  | L ⇒ L   | ✔                   |            |            
+| [Mamba](https://huggingface.co/state-spaces/mamba-2.8b-slimpj)               |     | 2.8B  | L ⇒ L   |                     |            |            
+| [Mistral](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)         |     | 7B    | L ⇒ L   | ✔                   | ✔          |         
+| [Mixtral](https://huggingface.co/mistralai/Mixtral-8x22B-Instruct-v0.1)      | ✔   | 8x22B | L ⇒ L   | ✔                   |            |            
+| [Gpt Bigcode](https://huggingface.co/bigcode/gpt_bigcode-santacoder)         |     | 1.1B  | L ⇒ L   | ✔                   |            |            
+| [Baichuan](https://huggingface.co/baichuan-inc/Baichuan2-7B-Chat)            |     | 7B    | L ⇒ L   | ✔                   | ✔          |            
+| [Falcon](https://huggingface.co/tiiuae/falcon-7b-instruct)                   |     | 7B    | L ⇒ L   | ✔                   |            |            
+| [StarCoder 2](https://huggingface.co/bigcode/starcoder2-15b-instruct-v0.1)   |     | 15B   | L ⇒ L   | ✔                   |            |            
+| [Qwen 2](https://huggingface.co/Qwen/Qwen2-7B-Instruct)                      |     | 7B    | L ⇒ L   | ✔                   | ✔          |                 
+| [Qwen 1.5](https://huggingface.co/Qwen/Qwen1.5-7B-Chat)                      |     | 7B    | L ⇒ L   | ✔                   | ✔          |                
+| [Opt](https://huggingface.co/facebook/opt-6.7b)                              |     | 6.7B  | L ⇒ L   |                     |            |            
+| [T5](https://huggingface.co/google-t5/t5-11b)                                |     | 11B   | L ⇒ L   |                     |            |            
+| [Galactica](https://huggingface.co/facebook/galactica-120b)                  |     | 120B  | L ⇒ L   |                     |            |            
+| [SantaCoder](https://huggingface.co/bigcode/santacoder)                      |     | 1.1B  | L ⇒ L   | ✔                   |            |            
+| [Bloom](https://huggingface.co/bigscience/bloom-560m)                        |     | 560M  | L ⇒ L   |                     |            |            
+| [Mpt](https://huggingface.co/mosaicml/mpt-7b-instruct)                       |     | 7B    | L ⇒ L   |                     |            |            
+| [Gpt2](https://huggingface.co/openai-community/gpt2)                         |     | 124M  | L ⇒ L   | ✔                   |            |            
+| [Gpt Neox](https://huggingface.co/EleutherAI/gpt-neox-20b)                   |     | 20B   | L ⇒ L   | ✔                   |            |            
+| [Yi 1.5](https://huggingface.co/01-ai/Yi-1.5-9B-Chat)                        |     | 9B    | L ⇒ L   | ✔                   |         ✔  |            
+| [ChatGLM 4](https://huggingface.co/THUDM/glm-4-9b-chat)                      |     | 9B    | L ⇒ L   | ✔                   | ✔          |            
