@@ -2,6 +2,9 @@ install-punica-kernel:
 	pip install wheel setuptools --upgrade
 	cd server/punica_kernels && pip install -v --no-build-isolation .
 
+install-flashinfer-kernel:
+	pip install flashinfer==0.0.8 -i https://flashinfer.ai/whl/cu121/torch2.3
+
 install-server:
 	cd server && make install
 
@@ -21,7 +24,7 @@ install-launcher:
 install-benchmark:
 	cd benchmark && cargo install --path .
 
-install: install-server install-router install-launcher install-custom-kernels install-punica-kernel
+install: install-server install-router install-launcher install-custom-kernels install-flashinfer-kernel install-punica-kernel
 
 server-dev:
 	cd server && make run-dev
