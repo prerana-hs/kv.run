@@ -47,6 +47,25 @@ make install
 `Dockerfile_kvrun` provides a docker image building script. We will provide pre-built docker images shortly.
 
 ## Usages
+#### Deploy services
+```shell
+text-generation-launcher --model-id tjluyao/llama-3-8b
+```
+You can use `--disable-flashinfer` to force a classic TGI serving.
+
+#### Deploy services
+```shell
+text-generation-launcher --model-id tjluyao/llama-3-8b
+```
+You can use `--disable-flashinfer` to force a classic TGI serving.
+
+#### Query the model
+You can query the model either through `curl`:
+```shell
+curl 127.0.0.1:3000/generate -X POST -d '{"inputs":"What is Deep Learning?","parameters":{"lora_id": "tjluyao/llama-3-8b-math", "max_new_tokens":20}}' -H 'Content-Type: application/json'
+```
+or using the Python client. Please refer to [README.me](clients/python/README.md).
+
 #### Local API tests
 ```shell
 cd server/examples && python test_local_api.py
@@ -58,10 +77,6 @@ python server/examples/test_ui.py
 ```
 [demo.mp4](https://github.com/mlsys-io/kv.run/assets/12567967/977b09fb-bd90-4757-85ab-e5fc2a58cd93)
 
-#### Deploy services
-```shell
-text-generation-launcher --model-id tjluyao/llama-3-8b
-```
 #### Using quantized models
 Add --quantize [Method] to the command above, for example:
 ```shell
