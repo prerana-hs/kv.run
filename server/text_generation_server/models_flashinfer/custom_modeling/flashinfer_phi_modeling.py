@@ -241,7 +241,7 @@ class PhiMLP(nn.Module):
         )
 
         # llama weights are up_proj and down_proj and bias=False
-        self.up_proj = TensorParallelRowLinear.load(
+        self.up_proj = TensorParallelColumnLinear.load(
             config,
             prefix=f"{prefix}.fc1",
             weights=weights,
@@ -256,13 +256,27 @@ class PhiMLP(nn.Module):
 
     # TODO: add lora adapter
     def forward(self, hidden_states, loraWeight: BatchedModelLoraWeight):
-        gate_up_states = self.up_proj(hidden_states)
-        gate_up_acted = self.act(gate_up_states)
-        gate_down_states = self.down_proj(gate_up_acted)
+        # gate_up_states = self.up_proj(hidden_states)
+        # gate_up_acted = self.act(gate_up_states)
+        # gate_down_states = self.down_proj(gate_up_acted)
 
         # NOTE: Llama requires the gate up states to an intermediate size
         # Phi does not and we can avoid the `view` operation
-        return gate_down_states
+
+        # to use lora, if splite up gate and up like llama would help
+        gate_up_states = self.gate_up_proj(hidden_states)
+        gate_up_states = gate_up_states.view(-1, 2, self.intermediate_size)
+        gate = gate_up_states[:, 0].contiguous()
+        loraWeight.apply_lora_weight_gate(gate, hidden_states, self.layer_idx)
+        gate = self.act(gate)
+        up = gate_up_states[:, 1].contiguous()
+        loraWeight.apply_lora_weight_up(up, hidden_states, self.layer_idx)
+        t = gate * up
+        down = self.down_proj(t)
+        loraWeight.apply_lora_weight_down(down, t, self.layer_idx)
+
+        # return gate_down_states
+        return down
 
 
 class FlashPhiLayer(nn.Module):
