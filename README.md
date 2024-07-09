@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # kv.run
 (Limited) comparison of popular model serving solutions
 
