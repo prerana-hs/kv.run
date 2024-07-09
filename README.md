@@ -27,7 +27,7 @@ sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
 ```
 
-#### Install Kernel Libraries
+#### Install Kernel Libraries (optional)
 ```shell
 # Install FlashInfer
 # For CUDA 12.1 & torch 2.3
@@ -101,7 +101,7 @@ curl 127.0.0.1:3000/generate -X POST -d '{"inputs":"What is Deep Learning?","par
 ```
 
 ## Benchmarks
-Testing Llama-2-7b on RTX 6000 ada:
+Testing Llama-2-7b on RTX 6000 ada (Vast AI):
 
 | Step    | Batch Size | Average FlashInfer  | Average TGI         |
 |---------|------------|---------------------|---------------------|
@@ -117,6 +117,24 @@ Testing Llama-2-7b on RTX 6000 ada:
 |         | 8          | 383.92 tokens/secs  | 297.53 tokens/secs  |
 |         | 16         | 682.78 tokens/secs  | 562.83 tokens/secs  |
 |         | 32         | 1119.92 tokens/secs | 993.33 tokens/secs |
+
+Testing Llama-2-7b on 3090 (Vast AI):
+
+| Step    | Batch Size | Average FlashInfer  | Average TGI        |
+|---------|------------|---------------------|--------------------|
+| Prefill | 1          | 44.33 tokens/secs   | 23.32 tokens/secs  |
+|         | 2          | 74.81 tokens/secs  | 46.68 tokens/secs  |
+|         | 4          | 133.93 tokens/secs  | 90.51 tokens/secs  |
+|         | 8          | 189.78 tokens/secs  | 168.27 tokens/secs |
+|         | 16         | 231.24 tokens/secs  | 218.12 tokens/secs |
+|         | 32         | 270.12 tokens/secs  | 265.74tokens/secs  |
+| Decode  | 1          | 50.21 tokens/secs   | 23.13 tokens/secs  |
+|         | 2          | 89.70 tokens/secs  | 47.26 tokens/secs  |
+|         | 4          | 174.92 tokens/secs  | 93.09 tokens/secs  |
+|         | 8          | 324.06 tokens/secs  | 175.21 tokens/secs |
+|         | 16         | 567.67 tokens/secs  | 337.92 tokens/secs |
+|         | 32         | 861.50 tokens/secs | 601.03 tokens/secs |
+
 
 ## Model and kernel support matrix
 Note: L = Language, I = Image
