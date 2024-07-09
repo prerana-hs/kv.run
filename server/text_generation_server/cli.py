@@ -43,7 +43,7 @@ def serve(
     logger_level: str = "INFO",
     json_output: bool = False,
     otlp_endpoint: Optional[str] = None,
-    use_flashinfer: Optional[bool] = True,
+    disable_flashinfer: Optional[bool] = False,
 ):
     if sharded:
         assert (
@@ -92,12 +92,12 @@ def serve(
             "Only 1 can be set between `dtype` and `quantize`, as they both decide how goes the final model."
         )
 
-    if use_flashinfer:
+    if not disable_flashinfer:
         from text_generation_server import server_flashinfer
-
         serv = server_flashinfer
     else:
         serv = server
+
     serv.serve(
         model_id,
         revision,

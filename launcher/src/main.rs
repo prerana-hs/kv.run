@@ -448,6 +448,10 @@ struct Args {
     /// Specify LoRA adapters
     #[clap(default_value = "empty", long, env)]
     lora_ids: String,
+
+    /// Using Flashinfer kernel or not
+    #[clap(long, env)]
+    disable_flashinfer: bool,
 }
 
 #[derive(Debug)]
@@ -486,6 +490,7 @@ fn shard_manager(
     shutdown: Arc<AtomicBool>,
     _shutdown_sender: mpsc::Sender<()>,
     lora_ids: String,
+    disable_flashinfer: bool,
 ) {
     // Enter shard-manager tracing span
     let _span = tracing::span!(tracing::Level::INFO, "shard-manager", rank = rank).entered();
@@ -512,6 +517,10 @@ fn shard_manager(
     if lora_ids != *"empty" {
         shard_args.push("--lora-ids".to_string());
         shard_args.push(lora_ids.clone());
+    }
+
+    if disable_flashinfer {
+        shard_args.push("--disable-flashinfer".to_string());
     }
 
     // Activate trust remote code
@@ -1155,6 +1164,7 @@ fn spawn_shards(
         let rope_factor = args.rope_factor;
         let max_batch_size = args.max_batch_size;
         let lora_ids = args.lora_ids.clone();
+        let disable_flashinfer = args.disable_flashinfer;
 
         thread::spawn(move || {
             shard_manager(
@@ -1186,6 +1196,7 @@ fn spawn_shards(
                 shutdown,
                 shutdown_sender,
                 lora_ids,
+                disable_flashinfer,
             )
         });
     }
@@ -1503,7 +1514,7 @@ fn main() -> Result<(), LauncherError> {
             (Some(max_input_tokens), Some(max_input_length)) => {
                 return Err(LauncherError::ArgumentValidation(
                     format!("Both `max_input_tokens` ({max_input_tokens}) and `max_input_length` ({max_input_length}) are set. Please define only `max_input_tokens` as `max_input_length is deprecated for naming consistency.",
-                )));
+                    )));
             }
             (Some(max_input_tokens), None) | (None, Some(max_input_tokens)) => max_input_tokens,
             (None, None) => {
@@ -1631,7 +1642,7 @@ fn main() -> Result<(), LauncherError> {
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
     })
-    .expect("Error setting Ctrl-C handler");
+        .expect("Error setting Ctrl-C handler");
 
     // Download and convert model weights
     download_convert_model(&args, running.clone())?;
@@ -1684,10 +1695,10 @@ fn main() -> Result<(), LauncherError> {
         shutdown.clone(),
         &shutdown_receiver,
     )
-    .map_err(|err| {
-        shutdown_shards(shutdown.clone(), &shutdown_receiver);
-        err
-    })?;
+        .map_err(|err| {
+            shutdown_shards(shutdown.clone(), &shutdown_receiver);
+            err
+        })?;
 
     // Default exit code
     let mut exit_code = Ok(());
