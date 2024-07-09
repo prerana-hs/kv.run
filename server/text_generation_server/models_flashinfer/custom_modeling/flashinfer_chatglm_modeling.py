@@ -11,13 +11,16 @@ import torch.nn.functional as F
 
 from text_generation_server.layers.layernorm import FastRMSNorm
 from text_generation_server.utils.lora_utils import BatchedModelLoraWeight
-from text_generation_server.utils.cache_manager_flashinfer import KvCachePool, KvCacheBatchPosition
+from text_generation_server.utils.cache_manager_flashinfer import (
+    KvCachePool,
+    KvCacheBatchPosition,
+)
 from text_generation_server.layers import (
     TensorParallelRowLinear,
     TensorParallelColumnLinear,
     TensorParallelEmbedding,
     SpeculativeHead,
-    get_linear
+    get_linear,
 )
 
 from typing import Optional, List, Tuple
@@ -27,6 +30,7 @@ from transformers.utils import logging
 from transformers.activations import ACT2FN
 
 from text_generation_server.layers.flashinfer_attention import (
+    POS_ENCODING_MODE,
     FlashinferAttentionWrapper,
     AttentionRotaryParams,
 )
@@ -48,6 +52,7 @@ logger = logging.get_logger(__name__)
 
 class ChatGLMConfig(PretrainedConfig):
     model_type = "chatglm"
+
     def __init__(
         self,
         num_layers=28,
@@ -75,7 +80,7 @@ class ChatGLMConfig(PretrainedConfig):
         quantization_bit=0,
         pre_seq_len=None,
         prefix_projection=False,
-        **kwargs
+        **kwargs,
     ):
         self.num_layers = num_layers
         self.vocab_size = padded_vocab_size
@@ -90,7 +95,9 @@ class ChatGLMConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layernorm_epsilon = layernorm_epsilon
         self.rmsnorm = rmsnorm
-        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
+        self.apply_residual_connection_post_layernorm = (
+            apply_residual_connection_post_layernorm
+        )
         self.post_layer_norm = post_layer_norm
         self.add_bias_linear = add_bias_linear
         self.add_qkv_bias = add_qkv_bias
@@ -145,7 +152,6 @@ class ChatGLMMLP(nn.Module):
             bias=False,
         )
 
-
     def forward(self, hidden_states, loraWeight: BatchedModelLoraWeight):
         # [s, b, 3hp]
         up = self.up_proj(hidden_states)
@@ -186,8 +192,10 @@ def _load_gqa(config, prefix: str, weights):
 
         head_size = config.hidden_size // config.num_attention_heads
         num_heads = config.num_attention_heads // weights.process_group.size()
-        num_key_value_heads = config.multi_query_group_num // weights.process_group.size()
-        
+        num_key_value_heads = (
+            config.multi_query_group_num // weights.process_group.size()
+        )
+
         assert list(weight.shape) == [
             (num_heads + 2 * num_key_value_heads) * head_size,
             config.hidden_size,
@@ -205,7 +213,7 @@ class FlashChatGLMAttention(nn.Module):
         flashinferWrapper: FlashinferAttentionWrapper,
         config: ChatGLMConfig,
         weights,
-        layer_idx: int
+        layer_idx: int,
     ):
         super().__init__()
         self.num_heads = config.num_attention_heads
@@ -218,7 +226,7 @@ class FlashChatGLMAttention(nn.Module):
 
         self.num_key_value_heads = config.multi_query_group_num
         self.num_key_value_groups = self.num_qo_heads // self.num_key_value_heads
-        
+
         # self.num_kv_heads = (
         #     config.num_key_value_heads // weights.process_group.size()
         # )
@@ -229,11 +237,15 @@ class FlashChatGLMAttention(nn.Module):
 
         self.flashinferWrapper = flashinferWrapper
         self.rotaryParams = AttentionRotaryParams(
-            rope_scale=None, rope_theta=10000 * config.rope_ratio
+            pos_encoding_mode=POS_ENCODING_MODE.ROPE_LLAMA,
+            rope_scale=None,
+            rope_theta=10000 * config.rope_ratio,
         )
 
         self.layer_idx = layer_idx
-        self.qkv_proj = load_attention(config, f'{prefix}.query_key_value', weights, self.num_key_value_heads)
+        self.qkv_proj = load_attention(
+            config, f"{prefix}.query_key_value", weights, self.num_key_value_heads
+        )
 
         self.o_proj = TensorParallelRowLinear.load(
             config,
@@ -245,10 +257,10 @@ class FlashChatGLMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        kvCachePool: KvCachePool, 
-        prefillBatchPosition: KvCacheBatchPosition,
-        decodeBatchPosition: KvCacheBatchPosition,
-        loraWeight: BatchedModelLoraWeight | None
+        kvCachePool: KvCachePool,
+        is_prefill: bool,
+        batch_position: KvCacheBatchPosition,
+        loraWeight: BatchedModelLoraWeight | None,
     ):
         q_dim = (
             self.flashinferWrapper.num_attention_heads * self.flashinferWrapper.head_dim
@@ -272,9 +284,8 @@ class FlashChatGLMAttention(nn.Module):
             k,
             v,
             kvCachePool.cache_data[self.layer_idx],
-            kvCachePool.page_len,
-            prefillBatchPosition,
-            decodeBatchPosition,
+            is_prefill,
+            batch_position,
             self.rotaryParams,
         )
         attn_outputs = self.o_proj(attn_outputs_raw)
@@ -285,9 +296,8 @@ class FlashChatGLMAttention(nn.Module):
 
 
 class FlashChatGLM3Layer(nn.Module):
-    def __init__(self,
-        flashinferWrapper: FlashinferAttentionWrapper,
-        layer_id, config, weights
+    def __init__(
+        self, flashinferWrapper: FlashinferAttentionWrapper, layer_id, config, weights
     ):
         super().__init__()
         self.layer_id = layer_id
@@ -297,12 +307,16 @@ class FlashChatGLM3Layer(nn.Module):
             flashinferWrapper=flashinferWrapper,
             config=config,
             weights=weights,
-            layer_idx=layer_id
+            layer_idx=layer_id,
         )
-        self.mlp = ChatGLMMLP(prefix=f"{prefix}.mlp", config=config, weights=weights, layer_idx=layer_id)
+        self.mlp = ChatGLMMLP(
+            prefix=f"{prefix}.mlp", config=config, weights=weights, layer_idx=layer_id
+        )
 
         self.input_layernorm = FastRMSNorm.load(
-            prefix=f"{prefix}.input_layernorm", weights=weights, eps=config.layernorm_epsilon
+            prefix=f"{prefix}.input_layernorm",
+            weights=weights,
+            eps=config.layernorm_epsilon,
         )
         self.post_attention_layernorm = FastRMSNorm.load(
             prefix=f"{prefix}.post_attention_layernorm",
@@ -314,19 +328,19 @@ class FlashChatGLM3Layer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         residual: torch.Tensor,
-        kvCachePool: KvCachePool, 
-        prefillBatchPosition: KvCacheBatchPosition,
-        decodeBatchPosition: KvCacheBatchPosition,
-        loraWeight: BatchedModelLoraWeight | None
+        kvCachePool: KvCachePool,
+        is_prefill: bool,
+        batch_position: KvCacheBatchPosition,
+        loraWeight: BatchedModelLoraWeight | None,
     ):
         normed_hidden_states, res = self.input_layernorm(hidden_states, residual)
 
         attn_output = self.self_attn(
             normed_hidden_states,
             kvCachePool,
-            prefillBatchPosition,
-            decodeBatchPosition,
-            loraWeight
+            is_prefill,
+            batch_position,
+            loraWeight,
         )
 
         normed_attn_res_output, attn_res = self.post_attention_layernorm(
@@ -352,16 +366,18 @@ class FlashChatGLM3Model(torch.nn.Module):
         assert config.num_attention_heads % weights.process_group.size() == 0
         assert config.multi_query_group_num % weights.process_group.size() == 0
         num_attention_heads = config.num_attention_heads // weights.process_group.size()
-        num_key_value_heads = config.multi_query_group_num // weights.process_group.size()
+        num_key_value_heads = (
+            config.multi_query_group_num // weights.process_group.size()
+        )
 
-        flashinferWrapper = FlashinferAttentionWrapper(
+        self.flashinferWrapper = FlashinferAttentionWrapper(
             num_attention_heads, num_key_value_heads, config.hidden_size
         )
 
         self.layers = nn.ModuleList(
             [
                 FlashChatGLM3Layer(
-                    flashinferWrapper,
+                    self.flashinferWrapper,
                     layer_id,
                     config,
                     weights,
@@ -370,7 +386,9 @@ class FlashChatGLM3Model(torch.nn.Module):
             ]
         )
         self.norm = FastRMSNorm.load(
-            prefix="transformer.encoder.final_layernorm", weights=weights, eps=config.layernorm_epsilon
+            prefix="transformer.encoder.final_layernorm",
+            weights=weights,
+            eps=config.layernorm_epsilon,
         )
 
         self.gradient_checkpointing = False
@@ -382,25 +400,33 @@ class FlashChatGLM3Model(torch.nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        kvCachePool: KvCachePool, 
-        prefillBatchPosition: KvCacheBatchPosition,
-        decodeBatchPosition: KvCacheBatchPosition,
-        loraWeight: BatchedModelLoraWeight | None
+        kvCachePool: KvCachePool,
+        is_prefill: bool,
+        batch_position: KvCacheBatchPosition,
+        loraWeight: BatchedModelLoraWeight | None,
     ) -> torch.Tensor:
         hidden_states = self.embed_tokens(input_ids)
         residual = None
+
+        self.flashinferWrapper.prepareAttention(
+            is_prefill,
+            batch_position,
+            kvCachePool.page_len,
+            POS_ENCODING_MODE.ROPE_LLAMA,
+            kvCachePool.cache_data[0].dtype,
+        )
         for i, layer in enumerate(self.layers):
             hidden_states, residual = layer(
                 hidden_states,
                 residual,
                 kvCachePool,
-                prefillBatchPosition,
-                decodeBatchPosition,
-                loraWeight
+                is_prefill,
+                batch_position,
+                loraWeight,
             )
 
         hidden_states, _ = self.norm(hidden_states, residual)
-
+        self.flashinferWrapper.endBatchAttention(is_prefill)
         return hidden_states
 
 
@@ -411,7 +437,11 @@ class FlashChatGLMForCausalLM(torch.nn.Module):
         self.model = FlashChatGLM3Model(config, weights)
         self.lm_head = SpeculativeHead.load(
             config,
-            prefix="transformer.embedding.word_embeddings" if config.tie_word_embeddings else "transformer.output_layer",
+            prefix=(
+                "transformer.embedding.word_embeddings"
+                if config.tie_word_embeddings
+                else "transformer.output_layer"
+            ),
             weights=weights,
         )
 
@@ -419,16 +449,16 @@ class FlashChatGLMForCausalLM(torch.nn.Module):
         self,
         input_ids: torch.Tensor,
         kvCachePool: KvCachePool,
-        prefillBatchPosition: KvCacheBatchPosition,
-        decodeBatchPosition: KvCacheBatchPosition,
-        loraWeight: BatchedModelLoraWeight | None
+        is_prefill: bool,
+        batch_position: KvCacheBatchPosition,
+        loraWeight: BatchedModelLoraWeight | None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         hidden_states = self.model(
             input_ids,
             kvCachePool,
-            prefillBatchPosition,
-            decodeBatchPosition,
-            loraWeight
+            is_prefill,
+            batch_position,
+            loraWeight,
         )
         logits, speculative_logits = self.lm_head(hidden_states)
         return logits, speculative_logits
