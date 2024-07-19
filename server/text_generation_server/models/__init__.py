@@ -50,6 +50,7 @@ FLASH_ATT_ERROR_MESSAGE = "{} requires Flash Attention enabled models."
 FLASH_ATTENTION = True
 
 try:
+    from text_generation_server.models.flash_causal_lm import FlashCausalLM
     from text_generation_server.models.flash_rw import FlashRWSharded
     from text_generation_server.models.flash_gpt2 import FlashGPT2
     from text_generation_server.models.flash_neox import FlashNeoXSharded
