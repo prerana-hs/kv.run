@@ -264,6 +264,13 @@ class FlashinferLM(Model):
             self.batch_cache.set(next_batch)
         return generations, batch, timings
 
+    def filter_batch(self, batch_id: int) -> Optional[FlashinferBatch]:
+        batch = self.batch_cache.pop(batch_id)
+        if batch is None:
+            raise ValueError(f"Batch ID {batch_id} not found in cache.")
+        self.batch_cache.set(batch)
+        batch
+
     def clear_cache(self):
         all_batches: List[FlashinferBatch] = self.batch_cache.get_all_values()
         for batch in all_batches:
