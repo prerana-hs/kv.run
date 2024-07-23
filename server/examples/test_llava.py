@@ -1,5 +1,5 @@
 from text_generation_server.pb import generate_pb2_grpc, generate_pb2
-from text_generation_server.models_flashinfer.llava_flashinfer import LlavaLM, LlavaBatch
+from text_generation_server.models_flashinfer.flashinfer_llava import LlavaLM, LlavaBatch
 import random, torch
 import base64
 
