@@ -269,7 +269,7 @@ class FlashinferLM(Model):
         if batch is None:
             raise ValueError(f"Batch ID {batch_id} not found in cache.")
         self.batch_cache.set(batch)
-        batch
+        return batch
 
     def clear_cache(self):
         all_batches: List[FlashinferBatch] = self.batch_cache.get_all_values()
