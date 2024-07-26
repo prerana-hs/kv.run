@@ -1048,6 +1048,7 @@ class FlashCausalLM(Model):
             next_token_logits = out
 
         speculate = get_speculate()
+        start_next_token_id = time.time_ns()
         (
             next_input_ids,
             next_token_logprobs,
@@ -1065,6 +1066,8 @@ class FlashCausalLM(Model):
         batch_top_token_ids, batch_top_token_logprobs = batch_top_tokens(
             batch.top_n_tokens, batch.top_n_tokens_tensor, logprobs, accepted_ids
         )
+        next_token_id_ns = time.time_ns() - start_next_token_id
+        print(f"next token id total time {next_token_id_ns/1e6}ms")
 
         if prefill:
             if len(batch) > 1 and prefill_logprobs:
