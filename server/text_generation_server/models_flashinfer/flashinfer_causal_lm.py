@@ -402,13 +402,17 @@ class FlashinferLM(Model):
         all_stop = True
         generations: List[Generation] = []
         num_stopped_requests = 0
+        next_token_id_ns = 0
         for i, request_context in enumerate(batch.request_contexts):
             if request_context.is_stopped:
                 num_stopped_requests += 1
                 continue
+            
+            start_next_token_id = time.time_ns()
             next_token_id = request_context.get_next_token_id(
                 logits[i - num_stopped_requests].unsqueeze(0)
             )
+            next_token_id_ns += time.time_ns() - start_next_token_id
             request_context.append_token(next_token_id)
             # text = reqctx.decode_tokens() # todo: ??
             # special handling for ChatGLM
@@ -489,6 +493,7 @@ class FlashinferLM(Model):
             )
             generations.append(generation)
 
+        print(f"next token id total time {next_token_id_ns/1e6}ms")
         forward_ns = start_decode - start
         decode_ns = time.time_ns() - start_decode
         # The router stops generation only when batch=None
