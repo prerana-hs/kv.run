@@ -136,7 +136,7 @@ def get_model(
             lora_ids.split(";") if lora_ids else None,
             quantize=quantize,
             dtype=dtype,
-            trust_remote_code = trust_remote_code
+            trust_remote_code=trust_remote_code,
         )
     elif model_type == LLAMA or model_type == BAICHUAN or model_type == PHI3:
         return FlashinferLlama(
@@ -144,7 +144,7 @@ def get_model(
             lora_ids.split(";") if lora_ids else None,
             quantize=quantize,
             dtype=dtype,
-            trust_remote_code = trust_remote_code
+            trust_remote_code=trust_remote_code,
         )
     elif model_type == GEMMA:
         return FlashinferGemma(
@@ -152,7 +152,7 @@ def get_model(
             lora_ids.split(";") if lora_ids else None,
             quantize=quantize,
             dtype=dtype,
-            trust_remote_code = trust_remote_code
+            trust_remote_code=trust_remote_code,
         )
     elif model_type == MISTRAL:
         return FlashinferMistral(
@@ -160,7 +160,7 @@ def get_model(
             lora_ids.split(";") if lora_ids else None,
             quantize=quantize,
             dtype=dtype,
-            trust_remote_code = trust_remote_code
+            trust_remote_code=trust_remote_code,
         )
     elif model_type == QWEN2:
         return FlashinferQwen2(
@@ -168,7 +168,7 @@ def get_model(
             lora_ids.split(";") if lora_ids else None,
             quantize=quantize,
             dtype=dtype,
-            trust_remote_code = trust_remote_code
+            trust_remote_code=trust_remote_code,
         )
 
     raise ValueError(f"Unsupported model type {model_type}")
