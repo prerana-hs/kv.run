@@ -42,45 +42,54 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
 
 
 promptOverride = "What is deep learning?"
-requests = []
-batch_size = 32
-for i in range(batch_size):
-    requests.append(
-        make_input(
-            "tjluyao/gemma-2b-it-math", "base", id=i, promptOverride=promptOverride
-        )
-    )
+global_request_id = 0
+global_batch_id = 0
 
-# Assemble input batch
-pb_batch_with_inputs = generate_pb2.Batch(id=0, requests=requests, size=len(requests))
-pb_batch_empty = generate_pb2.Batch()
+
+def generateBatch(batch_size: int):
+    requests = []
+    for i in range(batch_size):
+        requests.append(
+            make_input(
+                "tjluyao/gemma-2b-it-math",
+                "base",
+                id=global_request_id,
+                promptOverride=promptOverride,
+            )
+        )
+        global_request_id = global_request_id + 1
+    batch_pb2 = generate_pb2.Batch(
+        id=global_batch_id, requests=requests, size=len(requests)
+    )
+    global_batch_id = global_batch_id + 1
+    return batch_pb2
+
+
+num_tests = 10
+batch_size = 32
+
+forward_ms_all = []
+decode_ms_all = []
+total_ms_all = []
 
 with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
     stub = generate_pb2_grpc.TextGenerationServiceStub(channel)
-
-    # Info
     print(stub.Info(generate_pb2.InfoRequest()))
-    # Warm up
     wr = generate_pb2.WarmupRequest(
-        batch=pb_batch_with_inputs,
+        batch=generateBatch(2),
         max_total_tokens=2048,
         max_prefill_tokens=1024,
         max_input_length=1024,
     )
     stub.Warmup(wr)
-    # Prefill
-    pr = generate_pb2.PrefillRequest(batch=pb_batch_with_inputs)
-    resp = stub.Prefill(pr)
-    generations, cbatch, forward_ns, decode_ns, total_ns = (
-        resp.generations,
-        resp.batch,
-        resp.forward_ns,
-        resp.decode_ns,
-        resp.total_ns,
-    )
-    print(
-        f"Finished prefilling :\n"
-        f"forward_ns: {forward_ns/1e6}ms \n"
-        f"decode_ns: {decode_ns/1e6}ms \n"
-        f"total_ns: {total_ns/1e6}ms \n"
-    )
+    for i in range(num_tests):
+        batch = generateBatch(batch_size)
+        pr = generate_pb2.PrefillRequest(batch=batch)
+        resp = stub.Prefill(pr)
+        forward_ms_all.append(resp.forward_ns / 1e6)
+        decode_ms_all.append(resp.decode_ns / 1e6)
+        total_ms_all.append(resp.total_ns / 1e6)
+
+print(forward_ms_all)
+print(decode_ms_all)
+print(total_ms_all)
