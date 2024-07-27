@@ -407,7 +407,7 @@ class FlashinferLM(Model):
             if request_context.is_stopped:
                 num_stopped_requests += 1
                 continue
-            
+
             start_next_token_id = time.time_ns()
             next_token_id = request_context.get_next_token_id(
                 logits[i - num_stopped_requests].unsqueeze(0)

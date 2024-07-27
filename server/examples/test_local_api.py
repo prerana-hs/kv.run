@@ -261,7 +261,7 @@ elif test == "baichuan":
     service = FlashinferLlama(
         model_id="baichuan-inc/Baichuan2-7B-Chat",
         lora_ids=["tjluyao/baichuan2-7b-chat-lora1"],
-        trust_remote_code=True
+        trust_remote_code=True,
     )
 elif test == "qwen2-7":
     # Todo: qwen2-7b instruct lora adapter
