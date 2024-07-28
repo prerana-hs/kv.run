@@ -289,7 +289,8 @@ elif test == "qwen2-7":
             promptOverride="给我讲个故事",
         ),
     ]
-    service = FlashinferQwen2(model_id="Qwen/Qwen2-7B-Instruct", trust_remote_code=True)
+    #service = FlashinferQwen2(model_id="Qwen/Qwen2-7B-Instruct", trust_remote_code=True)
+    service = FlashinferQwen2(model_id="Qwen/Qwen2-7B", trust_remote_code=True)
 
 elif test == "chatglm4":
     # Todo: chatglm4-9b lora adapter
