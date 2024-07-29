@@ -1034,6 +1034,7 @@ class FlashCausalLM(Model):
             del batch
             raise e
 
+        start_decode = time.time_ns()
         if prefill:
             next_token_logits = (
                 out[batch.prefill_next_token_indices] if prefill_logprobs else out
@@ -1067,8 +1068,6 @@ class FlashCausalLM(Model):
             batch.top_n_tokens, batch.top_n_tokens_tensor, logprobs, accepted_ids
         )
         next_token_id_ns = time.time_ns() - start_next_token_id
-        print(f"next token id total time {next_token_id_ns/1e6}ms")
-
         if prefill:
             if len(batch) > 1 and prefill_logprobs:
                 # We create the prefill_tokens_indices tensor that will be used to gather prefill logprobs
@@ -1153,7 +1152,6 @@ class FlashCausalLM(Model):
         next_token_logprobs = next_token_logprobs.tolist()
         next_token_ids = next_input_ids.tolist()
         accepted_ids = accepted_ids.tolist()
-        start_decode = time.time_ns()
 
         # Zipped iterator
         iterator = zip(
@@ -1341,5 +1339,5 @@ class FlashCausalLM(Model):
         batch.prefill_next_token_indices = None
 
         forward_ns = start_decode - start
-        decode_ns = time.time_ns() - start_decode
+        decode_ns = next_token_id_ns
         return generations, batch, (forward_ns, decode_ns)
