@@ -1068,8 +1068,6 @@ class FlashCausalLM(Model):
             batch.top_n_tokens, batch.top_n_tokens_tensor, logprobs, accepted_ids
         )
         next_token_id_ns = time.time_ns() - start_next_token_id
-        print(f"next token id total time {next_token_id_ns/1e6}ms")
-
         if prefill:
             if len(batch) > 1 and prefill_logprobs:
                 # We create the prefill_tokens_indices tensor that will be used to gather prefill logprobs

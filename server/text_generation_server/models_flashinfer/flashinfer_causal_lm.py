@@ -493,7 +493,6 @@ class FlashinferLM(Model):
             )
             generations.append(generation)
 
-        print(f"next token id total time {next_token_id_ns/1e6}ms")
         forward_ns = start_decode - start
         decode_ns = next_token_id_ns
         # The router stops generation only when batch=None

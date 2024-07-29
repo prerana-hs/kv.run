@@ -47,6 +47,8 @@ global_batch_id = 0
 
 
 def generateBatch(batch_size: int):
+    global global_request_id
+    global global_batch_id
     requests = []
     for i in range(batch_size):
         requests.append(
@@ -65,7 +67,7 @@ def generateBatch(batch_size: int):
     return batch_pb2
 
 
-num_tests = 10
+num_tests = 100
 batch_size = 32
 
 forward_ms_all = []
@@ -75,21 +77,25 @@ total_ms_all = []
 with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
     stub = generate_pb2_grpc.TextGenerationServiceStub(channel)
     print(stub.Info(generate_pb2.InfoRequest()))
-    wr = generate_pb2.WarmupRequest(
+    warmupRequest = generate_pb2.WarmupRequest(
         batch=generateBatch(2),
         max_total_tokens=2048,
         max_prefill_tokens=1024,
         max_input_length=1024,
     )
-    stub.Warmup(wr)
+    stub.Warmup(warmupRequest)
     for i in range(num_tests):
         batch = generateBatch(batch_size)
-        pr = generate_pb2.PrefillRequest(batch=batch)
-        resp = stub.Prefill(pr)
-        forward_ms_all.append(resp.forward_ns / 1e6)
-        decode_ms_all.append(resp.decode_ns / 1e6)
-        total_ms_all.append(resp.total_ns / 1e6)
+        prefillRequest = generate_pb2.PrefillRequest(batch=batch)
+        response = stub.Prefill(prefillRequest)
+        forward_ms_all.append(response.forward_ns / 1e6)
+        decode_ms_all.append(response.decode_ns / 1e6)
+        total_ms_all.append(response.total_ns / 1e6)
 
-print(forward_ms_all)
-print(decode_ms_all)
-print(total_ms_all)
+        clearCacheRequest = generate_pb2.ClearCacheRequest(id=batch.id)
+        stub.ClearCache(clearCacheRequest)
+
+
+print(forward_ms_all[1:])
+print(decode_ms_all[1:])
+print(total_ms_all[1:])
