@@ -38,7 +38,8 @@ else:
     # test = 'qwen1.5-1.8'
     # test = 'qwen1.5-70'
     # test = 'qwen2-7'
-    test = "chatglm4"
+    test = 'yi1.5-9b'
+    #test = "chatglm4"
 print("Testing " + test)
 
 # Load demo inputs
@@ -135,6 +136,21 @@ elif test == "llama-3-70":
     #                        lora_ids=['Dogge/llama-3-70B-instruct-uncensored-lora'], quantize='GPTQ')
     # Create an input batch of two queries
     requests = [make_input("Dogge/llama-3-70B-instruct-uncensored-lora", "lora", id=0)]
+elif test == "yi1.5-9b":
+    # Load model
+    service = FlashinferLlama(
+        model_id="01-ai/Yi-1.5-9B-Chat",
+        lora_ids=["baconnier/Finance_dolphin-2.9.1-yi-1.5-9b_lora"],
+    )
+    # Create an input batch of two queries
+    requests = [
+        make_input(
+            "abcdabcd987/gsm8k-llama2-7b-lora-16",
+            "base",
+            id=0,
+            promptOverride="Give me a breif introduction to Byznatine Fault Tolerance and why it is important?",
+        ),
+    ]
 elif test == "gemma":
     requests = [
         make_input("tjluyao/gemma-2b-it-math", "lora", id=0),
@@ -261,7 +277,7 @@ elif test == "baichuan":
     service = FlashinferLlama(
         model_id="baichuan-inc/Baichuan2-7B-Chat",
         lora_ids=["tjluyao/baichuan2-7b-chat-lora1"],
-        trust_remote_code=True
+        trust_remote_code=True,
     )
 elif test == "qwen2-7":
     # Todo: qwen2-7b instruct lora adapter
@@ -273,7 +289,8 @@ elif test == "qwen2-7":
             promptOverride="给我讲个故事",
         ),
     ]
-    service = FlashinferQwen2(model_id="Qwen/Qwen2-7B-Instruct", trust_remote_code=True)
+    #service = FlashinferQwen2(model_id="Qwen/Qwen2-7B-Instruct", trust_remote_code=True)
+    service = FlashinferQwen2(model_id="Qwen/Qwen2-7B", trust_remote_code=True)
 
 elif test == "chatglm4":
     # Todo: chatglm4-9b lora adapter

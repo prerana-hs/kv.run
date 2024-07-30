@@ -64,14 +64,9 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
         self.model.clear_cache()
         return generate_pb2.ClearCacheResponse()
 
-    # async def FilterBatch(self, request, context):
-    #     batch = self.cache.pop(request.batch_id)
-    #     if batch is None:
-    #         raise ValueError(f"Batch ID {request.batch_id} not found in cache.")
-    #     filtered_batch = batch.filter(request.request_ids)
-    #     self.cache.set(filtered_batch)
-
-    #     return generate_pb2.FilterBatchResponse(batch=filtered_batch.to_pb())
+    async def FilterBatch(self, request, context):
+        flashinferBatch = self.model.filter_batch(request.batch_id)
+        return generate_pb2.FilterBatchResponse(batch=flashinferBatch.to_pb())
 
     async def Warmup(self, request, context):
         return generate_pb2.WarmupResponse(

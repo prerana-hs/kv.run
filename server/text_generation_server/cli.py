@@ -94,6 +94,7 @@ def serve(
 
     if not disable_flashinfer:
         from text_generation_server import server_flashinfer
+
         serv = server_flashinfer
     else:
         serv = server

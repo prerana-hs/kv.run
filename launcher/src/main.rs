@@ -1642,7 +1642,7 @@ fn main() -> Result<(), LauncherError> {
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
     })
-        .expect("Error setting Ctrl-C handler");
+    .expect("Error setting Ctrl-C handler");
 
     // Download and convert model weights
     download_convert_model(&args, running.clone())?;
@@ -1695,10 +1695,10 @@ fn main() -> Result<(), LauncherError> {
         shutdown.clone(),
         &shutdown_receiver,
     )
-        .map_err(|err| {
-            shutdown_shards(shutdown.clone(), &shutdown_receiver);
-            err
-        })?;
+    .map_err(|err| {
+        shutdown_shards(shutdown.clone(), &shutdown_receiver);
+        err
+    })?;
 
     // Default exit code
     let mut exit_code = Ok(());

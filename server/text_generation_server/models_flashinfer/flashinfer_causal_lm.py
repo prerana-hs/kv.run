@@ -264,6 +264,13 @@ class FlashinferLM(Model):
             self.batch_cache.set(next_batch)
         return generations, batch, timings
 
+    def filter_batch(self, batch_id: int) -> Optional[FlashinferBatch]:
+        batch = self.batch_cache.pop(batch_id)
+        if batch is None:
+            raise ValueError(f"Batch ID {batch_id} not found in cache.")
+        self.batch_cache.set(batch)
+        return batch
+
     def clear_cache(self):
         all_batches: List[FlashinferBatch] = self.batch_cache.get_all_values()
         for batch in all_batches:
@@ -395,13 +402,17 @@ class FlashinferLM(Model):
         all_stop = True
         generations: List[Generation] = []
         num_stopped_requests = 0
+        next_token_id_ns = 0
         for i, request_context in enumerate(batch.request_contexts):
             if request_context.is_stopped:
                 num_stopped_requests += 1
                 continue
+
+            start_next_token_id = time.time_ns()
             next_token_id = request_context.get_next_token_id(
                 logits[i - num_stopped_requests].unsqueeze(0)
             )
+            next_token_id_ns += time.time_ns() - start_next_token_id
             request_context.append_token(next_token_id)
             # text = reqctx.decode_tokens() # todo: ??
             # special handling for ChatGLM
@@ -483,7 +494,7 @@ class FlashinferLM(Model):
             generations.append(generation)
 
         forward_ns = start_decode - start
-        decode_ns = time.time_ns() - start_decode
+        decode_ns = next_token_id_ns
         # The router stops generation only when batch=None
         if all_stop:
             return generations, None, (forward_ns, decode_ns)
