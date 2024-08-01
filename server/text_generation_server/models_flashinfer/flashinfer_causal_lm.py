@@ -103,24 +103,6 @@ class RequestContext:
         token = int(indices.tolist()[0])
         return token
 
-    def get_next_batch_token_id(self, logits: torch.Tensor) -> List[int]:
-        if self.logits_processor:
-            if self.repetition_penalty > 1.0:
-                t = torch.as_tensor([self.output_ids], device=logits.device)
-            else:
-                t = None
-            last_token_logits = self.logits_processor(t, logits)
-        else:
-            last_token_logits = logits
-
-        if self.temperature <= 0 or self.top_p <= 0:
-            _, indices = torch.topk(last_token_logits, 2)
-        else:
-            probs = torch.softmax(last_token_logits, dim=-1)
-            indices = torch.multinomial(probs, num_samples=2)
-        token = indices[:, 0].tolist()
-        return token
-
     def append_token(self, token_id: int):
         self.output_ids.append(token_id)
 
@@ -420,21 +402,32 @@ class FlashinferLM(Model):
         all_stop = True
         generations: List[Generation] = []
         num_stopped_requests = 0
-        start_next_token_id = time.time_ns()
-        next_token_ids = request_context.get_next_batch_token_id(logits)
-        next_token_id_ns = time.time_ns() - start_next_token_id
-
+        next_token_id_ns = 0
         for i, request_context in enumerate(batch.request_contexts):
             if request_context.is_stopped:
                 num_stopped_requests += 1
                 continue
-            next_token_id = next_token_ids[i-num_stopped_requests]
-            request_context.append_token(next_token_id)
-            text = self.tokenizer.decode(
-                next_token_id,
-                clean_up_tokenization_spaces=False,
-                skip_special_tokens=False,
+
+            start_next_token_id = time.time_ns()
+            next_token_id = request_context.get_next_token_id(
+                logits[i - num_stopped_requests].unsqueeze(0)
             )
+            next_token_id_ns += time.time_ns() - start_next_token_id
+            request_context.append_token(next_token_id)
+            # text = reqctx.decode_tokens() # todo: ??
+            # special handling for ChatGLM
+            if "ChatGLM" in str(type(self.model)):
+                text = self.tokenizer.decode(
+                    [next_token_id],
+                    clean_up_tokenization_spaces=False,
+                    skip_special_tokens=False,
+                )
+            else:
+                text = self.tokenizer.decode(
+                    next_token_id,
+                    clean_up_tokenization_spaces=False,
+                    skip_special_tokens=False,
+                )
 
             stop_reason = request_context.get_stop_reason()
             if stop_reason != None:
@@ -455,7 +448,35 @@ class FlashinferLM(Model):
                 generated_text = None
                 all_stop = False
 
-            request_context.prefill_tokens = None
+            # Prefill
+            if batch.is_prefill:  # and request_context.prefill_logprobs:
+                # Remove generated token to only have prefill and add nan for first prompt token
+                prefill_logprobs = []  # todo
+                prefill_token_ids = request_context.output_ids[
+                    : request_context.prompt_len
+                ]
+                # special handling for ChatGLM
+                if "ChatGLM" in str(type(self.model)):
+                    prefill_texts = self.tokenizer.batch_decode(
+                        [prefill_token_ids],
+                        clean_up_tokenization_spaces=False,
+                        skip_special_tokens=False,
+                    )
+                else:
+                    prefill_texts = self.tokenizer.batch_decode(
+                        prefill_token_ids,
+                        clean_up_tokenization_spaces=False,
+                        skip_special_tokens=False,
+                    )
+                request_context.prefill_tokens = Tokens(
+                    prefill_token_ids,
+                    prefill_logprobs,
+                    prefill_texts,
+                    is_special=[],
+                )
+                request_context.prefix_offset = request_context.prompt_len
+            else:
+                request_context.prefill_tokens = None
 
             generation = Generation(
                 request_context.request_id,
