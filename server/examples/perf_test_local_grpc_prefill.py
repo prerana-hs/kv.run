@@ -96,6 +96,6 @@ with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
         stub.ClearCache(clearCacheRequest)
 
 
-print(forward_ms_all[1:])
-print(decode_ms_all[1:])
-print(total_ms_all[1:])
+print(forward_ms_all)
+print(decode_ms_all)
+print(total_ms_all)
