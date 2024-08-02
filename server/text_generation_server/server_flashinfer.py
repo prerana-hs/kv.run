@@ -69,8 +69,9 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
         return generate_pb2.FilterBatchResponse(batch=flashinferBatch.to_pb())
 
     async def Warmup(self, request, context):
+        max_supported_total_tokens = self.model.warmup(request.batch)
         return generate_pb2.WarmupResponse(
-            max_supported_total_tokens=request.max_total_tokens
+            max_supported_total_tokens=max_supported_total_tokens
         )
 
     async def Prefill(self, request, context):

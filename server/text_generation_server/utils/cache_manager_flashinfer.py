@@ -2,6 +2,8 @@ from typing import Set, List
 import math
 import torch
 
+PAGE_LEN: int = 16
+
 
 class KvCacheBatchPosition:
     def __init__(
