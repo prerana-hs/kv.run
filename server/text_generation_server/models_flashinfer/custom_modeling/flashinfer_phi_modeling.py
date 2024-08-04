@@ -190,7 +190,8 @@ class FlashPhiAttention(torch.nn.Module):
         q = q_proj.contiguous()
         k = k_proj.contiguous()
         v = v_proj.contiguous()
-        loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
+        if loraWeight:
+            loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
 
         self.rotary_emb(
             q.view(
@@ -217,7 +218,8 @@ class FlashPhiAttention(torch.nn.Module):
             self.rotaryParams,
         )
         attn_outputs = self.o_proj(attn_outputs_raw)
-        loraWeight.apply_lora_weight_attn(
+        if loraWeight:
+            loraWeight.apply_lora_weight_attn(
             attn_outputs, attn_outputs_raw, self.layer_idx
         )
         return attn_outputs

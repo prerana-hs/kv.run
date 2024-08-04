@@ -28,7 +28,8 @@ from test_cases import DEMO, LoraSpec
 if len(sys.argv) == 2:
     test = sys.argv[1]
 else:
-    # test = "gemma"
+    # test = "llama-2"
+    test = "gemma"
     # test = "llama-3"
     # test = 'llama-3-70'
     # test = "baichuan"
@@ -38,7 +39,7 @@ else:
     # test = 'qwen1.5-1.8'
     # test = 'qwen1.5-70'
     # test = 'qwen2-7'
-    test = 'yi1.5-9b'
+    # test = 'yi1.5-9b'
     #test = "chatglm4"
 print("Testing " + test)
 
