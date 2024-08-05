@@ -182,6 +182,8 @@ class FlashinferLM(Model):
             self.loraManager.set_lora_weights(
                 lora_ids, self.model_config_for_lora, dtype
             )
+        
+        self.kvCachePool = None
 
         super(FlashinferLM, self).__init__(
             model=model,
@@ -225,50 +227,52 @@ class FlashinferLM(Model):
         return generations, batch, timings
 
     def warmup(self, batchPb: generate_pb2.Batch):
-        head_dim_padded = find_padded_head_dim(
-            self.model_config.hidden_size // self.model_config.num_attention_heads
-        )
-        dtype_size = torch.tensor([], dtype=self.dtype).element_size()
-        cache_page_size = (
-            2
-            * PAGE_LEN
-            * self.model_config.num_hidden_layers
-            * self.model_config.num_attention_heads
-            * head_dim_padded
-            * dtype_size
-        )
+        if not self.kvCachePool:
+            head_dim_padded = find_padded_head_dim(
+                self.model_config.hidden_size // self.model_config.num_attention_heads
+            )
+            dtype_size = torch.tensor([], dtype=self.dtype).element_size()
+            cache_page_size = (
+                2
+                * PAGE_LEN
+                * self.model_config.num_hidden_layers
+                * self.model_config.num_attention_heads
+                * head_dim_padded
+                * dtype_size
+            )
 
-        currentDevice = torch.cuda.current_device()
-        total_free_memory, _ = torch.cuda.mem_get_info(currentDevice)
-        total_gpu_memory = torch.cuda.get_device_properties(currentDevice).total_memory
-        free_memory = max(
-            0, total_free_memory - (1 - MEMORY_FRACTION) * total_gpu_memory
-        )
-        num_pages_to_allocate = int(free_memory * 0.80 / cache_page_size)
-        print(
-            f"Cache allocation:\n"
-            f"  Cache Page Size: {cache_page_size / 1024 / 1024} MB\n"
-            f"  Dtype Size: {dtype_size}\n"
-            f"  Free Memory: {free_memory / 1024 / 1024 / 1024} GB\n"
-            f"  Total GPU Memory: {total_gpu_memory / 1024 / 1024 / 1024} GB\n"
-            f"  Number of Pages to Allocate: {num_pages_to_allocate}"
-        )
+            currentDevice = torch.cuda.current_device()
+            total_free_memory, _ = torch.cuda.mem_get_info(currentDevice)
+            total_gpu_memory = torch.cuda.get_device_properties(currentDevice).total_memory
+            free_memory = max(
+                0, total_free_memory - (1 - MEMORY_FRACTION) * total_gpu_memory
+            )
+            num_pages_to_allocate = int(free_memory * 0.80 / cache_page_size)
+            print(
+                f"Cache allocation:\n"
+                f"  Cache Page Size: {cache_page_size / 1024 / 1024} MB\n"
+                f"  Dtype Size: {dtype_size}\n"
+                f"  Free Memory: {free_memory / 1024 / 1024 / 1024} GB\n"
+                f"  Total GPU Memory: {total_gpu_memory / 1024 / 1024 / 1024} GB\n"
+                f"  Number of Pages to Allocate: {num_pages_to_allocate}"
+            )
 
-        self.kvCachePool = KvCachePool(
-            max_pages=num_pages_to_allocate,
-            num_layers=self.model_config.num_hidden_layers,
-            num_heads=self.model_config.num_key_value_heads,
-            head_dim=head_dim_padded,
-            page_len=PAGE_LEN,
-            dtype=self.dtype,
-            device=self.device,
-        )
+            self.kvCachePool = KvCachePool(
+                max_pages=num_pages_to_allocate,
+                num_layers=self.model_config.num_hidden_layers,
+                num_heads=self.model_config.num_key_value_heads,
+                head_dim=head_dim_padded,
+                page_len=PAGE_LEN,
+                dtype=self.dtype,
+                device=self.device,
+            )
 
+        num_free_pages = self.kvCachePool.num_free_pages()
         batch = self._convertPbBatch(batchPb)
         self.generate_token(batch)
         for request_context in batch.request_contexts:
             request_context.request_kv_cache.release()
-        return num_pages_to_allocate * PAGE_LEN
+        return num_free_pages * PAGE_LEN
 
     def filter_batch(self, batch_id: int) -> Optional[FlashinferBatch]:
         batch = self.batch_cache.pop(batch_id)
