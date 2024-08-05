@@ -361,7 +361,7 @@ DEMO["/scratch/hy2203/models/01-ai/Yi-6B"] = DemoSpec(
 """,
 )
 
-DEMO["/scratch/hy2203/models/01-ai/Yi-6B"] = DemoSpec(
+DEMO["/scratch/hy2203/models/VictorNanka/phi-2-sft-lora"] = DemoSpec(
     weight_url="https://huggingface.co/01-ai/Yi-6B/blob/main/model.safetensors.index.json",
     system="Answer the following Grade School Math problem.",
     lora_template="<<SYS>>\n{system}\n<</SYS>>\n[INST] {question} [/INST]\n",
@@ -384,6 +384,4 @@ DEMO["/scratch/hy2203/models/01-ai/Yi-6B"] = DemoSpec(
 {"question": "Farmer Brown has 20 animals on his farm, all either chickens or cows. They have a total of 70 legs, all together. How many of the animals are chickens?", "answer": "Let C be the number of chickens.\nThere are 20-C cows.\nThe cows have 4*(20-C) legs.\nThe cows have 2C legs.\nThe total number of legs is 2C+4(20-C)=70.\n2C+80-4C=70\n2C=10\nC=<<5=5>>5\n#### 5"}
 {"question": "Henry and 3 of his friends order 7 pizzas for lunch. Each pizza is cut into 8 slices. If Henry and his friends want to share the pizzas equally, how many slices can each of them have?", "answer": "There are 7*8=<<7*8=56>>56 slices in total.\nThere are 1+3=<<1+3=4>>4 people in total.\nThey can each have 56/4=<<56/4=14>>14 slices.\n#### 14"}
 """,
-=======
-
 )
