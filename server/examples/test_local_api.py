@@ -313,6 +313,7 @@ display_results = {}
 
 # Iterative generation: each step generates a token for each input in the batch
 isPrefill = True
+service.warmup(batch)
 while True:
     if isPrefill:
         generations, next_batch, _ = service.prefill_batch(batch)

@@ -45,6 +45,9 @@ class KvCachePool:
         self.page_len = page_len
         self.free_page_mask = torch.ones(max_pages, dtype=torch.bool, device="cpu")
 
+    def num_free_pages(self):
+        return self.free_page_mask.sum()
+
     def allocate(self, num_pages: int):
         free_page_indices = self.free_page_mask.nonzero()
         assert (
