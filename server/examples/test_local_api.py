@@ -205,19 +205,21 @@ elif test == "qwen2-70":
 elif test == "phi":
     requests = [
         make_input(
-            "abcdabcd987/gsm8k-llama2-7b-lora-16",
+            "/scratch/hy2203/models/VictorNanka/phi-2-sft-lora",
             "base",
             id=0,
             promptOverride="why is deep learning so popular these days?",
         ),
         make_input(
-            "abcdabcd987/gsm8k-llama2-7b-lora-16",
-            "base",
+            "/scratch/hy2203/models/VictorNanka/phi-2-sft-lora",
+            "lora",
             id=1,
-            promptOverride="What are the differences between Manhattan and Brooklyn",
+            promptOverride="why is deep learning so popular these days?",
         ),
     ]
-    service = FlashinferPhi(model_id="microsoft/phi-2")
+    service = FlashinferPhi(model_id="/scratch/hy2203/models/microsoft/phi-2",
+                            lora_ids=['/scratch/hy2203/models/VictorNanka/phi-2-sft-lora'])
+    # service = FlashinferPhi(model_id="/scratch/hy2203/models/microsoft/phi-2")
 elif test == "phi3":
     requests = [
         make_input(
@@ -288,6 +290,7 @@ display_results = {}
 while True:
     generations, _, _ = service.generate_token(FlashinferBatch.Empty(batch.id))
     for gen in generations:
+        print(gen.request_id, gen.tokens.texts)
         if gen.prefill_tokens:
             display_results[gen.request_id] = [
                 "Prompt:\n"

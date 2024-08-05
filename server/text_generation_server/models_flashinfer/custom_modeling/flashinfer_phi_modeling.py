@@ -19,7 +19,7 @@ from text_generation_server.layers.rotary import (
 from punica_kernels import (
     rms_norm,
 )
-from text_generation_server.utils.lora_utils import BatchedModelLoraWeight
+from text_generation_server.utils.lora_utils import BatchedModelLoraWeightPhi
 from text_generation_server.utils.cache_manager_flashinfer import (
     KvCachePool,
     KvCacheBatchPosition,
@@ -174,7 +174,7 @@ class FlashPhiAttention(torch.nn.Module):
         decodeBatchPosition: KvCacheBatchPosition,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        loraWeight: BatchedModelLoraWeight,
+        loraWeight: BatchedModelLoraWeightPhi,
     ) -> torch.Tensor:
         q_dim = (
             self.flashinferWrapper.num_attention_heads * self.flashinferWrapper.head_dim
@@ -190,7 +190,7 @@ class FlashPhiAttention(torch.nn.Module):
         q = q_proj.contiguous()
         k = k_proj.contiguous()
         v = v_proj.contiguous()
-        loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
+        loraWeight.apply_lora_weight_Wkvq(q, k, v, hidden_states, self.layer_idx)
 
         self.rotary_emb(
             q.view(
@@ -218,7 +218,7 @@ class FlashPhiAttention(torch.nn.Module):
             self.rotaryParams,
         )
         attn_outputs = self.o_proj(attn_outputs_raw)
-        loraWeight.apply_lora_weight_attn(
+        loraWeight.apply_lora_weight_out_proj(
             attn_outputs, attn_outputs_raw, self.layer_idx
         )
         return attn_outputs
@@ -255,28 +255,16 @@ class PhiMLP(nn.Module):
         )
 
     # TODO: add lora adapter
-    def forward(self, hidden_states, loraWeight: BatchedModelLoraWeight):
-        # gate_up_states = self.up_proj(hidden_states)
-        # gate_up_acted = self.act(gate_up_states)
-        # gate_down_states = self.down_proj(gate_up_acted)
+    def forward(self, hidden_states, loraWeight: BatchedModelLoraWeightPhi):
+        gate_up_states = self.up_proj(hidden_states)
+        gate_up_acted = self.act(gate_up_states)
+        gate_down_states = self.down_proj(gate_up_acted)
+
+        return gate_down_states
 
         # NOTE: Llama requires the gate up states to an intermediate size
         # Phi does not and we can avoid the `view` operation
 
-        # to use lora, if splite up gate and up like llama would help
-        gate_up_states = self.gate_up_proj(hidden_states)
-        gate_up_states = gate_up_states.view(-1, 2, self.intermediate_size)
-        gate = gate_up_states[:, 0].contiguous()
-        loraWeight.apply_lora_weight_gate(gate, hidden_states, self.layer_idx)
-        gate = self.act(gate)
-        up = gate_up_states[:, 1].contiguous()
-        loraWeight.apply_lora_weight_up(up, hidden_states, self.layer_idx)
-        t = gate * up
-        down = self.down_proj(t)
-        loraWeight.apply_lora_weight_down(down, t, self.layer_idx)
-
-        # return gate_down_states
-        return down
 
 
 class FlashPhiLayer(nn.Module):
@@ -316,7 +304,7 @@ class FlashPhiLayer(nn.Module):
         decodeBatchPosition: KvCacheBatchPosition,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        loraWeight: BatchedModelLoraWeight,
+        loraWeight: BatchedModelLoraWeightPhi,
     ):
 
         hidden_states, res = self.input_layernorm(hidden_states, residual)
@@ -378,7 +366,7 @@ class FlashPhiModel(torch.nn.Module):
         kvCachePool: KvCachePool,
         prefillBatchPosition: KvCacheBatchPosition,
         decodeBatchPosition: KvCacheBatchPosition,
-        loraWeight: BatchedModelLoraWeight,
+        loraWeight: BatchedModelLoraWeightPhi,
     ) -> torch.Tensor:
         hidden_states = self.embed_tokens(input_ids)
         position_ids_prefill, max_seq_len_prefill = (
@@ -459,7 +447,7 @@ class FlashPhiForCausalLM(torch.nn.Module):
         kvCachePool: KvCachePool,
         prefillBatchPosition: KvCacheBatchPosition,
         decodeBatchPosition: KvCacheBatchPosition,
-        loraWeight: BatchedModelLoraWeight,
+        loraWeight: BatchedModelLoraWeightPhi,
         lm_head_indices: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         hidden_states = self.model(

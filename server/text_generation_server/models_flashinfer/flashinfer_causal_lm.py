@@ -449,7 +449,6 @@ class FlashinferLM(Model):
                 clean_up_tokenization_spaces=False,
                 skip_special_tokens=False,
             )
-
             is_stop = reqctx.is_stop()
             if is_stop != None:
                 output_text = self.tokenizer.decode(
