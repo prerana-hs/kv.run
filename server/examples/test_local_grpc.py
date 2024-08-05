@@ -1,6 +1,7 @@
 import grpc
 from text_generation_server.pb import generate_pb2_grpc, generate_pb2
 import random, json
+from collections import defaultdict
 from test_cases import DEMO, LoraSpec
 
 # put this file in ROOT\server, so you don't need to compile TGI
@@ -46,8 +47,18 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
 
 
 requests = [
-    make_input("tjluyao/gemma-2b-it-math", "base", id=0),
-    make_input("tjluyao/gemma-2b-it-math", "base", id=1),
+    make_input(
+        "tjluyao/gemma-2b-it-math",
+        "base",
+        id=0,
+        promptOverride="What is deep learning?",
+    ),
+    make_input(
+        "tjluyao/gemma-2b-it-math",
+        "base",
+        id=1,
+        promptOverride="Give me a breif introduction to Byznatine Fault Tolerance and why it is important?",
+    ),
 ]
 
 # Assemble input batch
@@ -56,38 +67,37 @@ pb_batch_empty = generate_pb2.Batch()
 
 with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
     stub = generate_pb2_grpc.TextGenerationServiceStub(channel)
-
-    # Info
-    print(stub.Info(generate_pb2.InfoRequest()))
-    # Warm up
-    wr = generate_pb2.WarmupRequest(
+    warmupRequest = generate_pb2.WarmupRequest(
         batch=pb_batch_with_inputs,
         max_total_tokens=2048,
         max_prefill_tokens=1024 * 10,
         max_input_length=1024,
     )
-    stub.Warmup(wr)
-    # Prefill
-    pr = generate_pb2.PrefillRequest(batch=pb_batch_with_inputs)
-    resp = stub.Prefill(pr)
-    generations, cbatch = resp.generations, resp.batch
-    for gen in generations:
-        print(gen.tokens.texts)
-
-    print("finished prefill tokens")
-
+    warmupResult = stub.Warmup(warmupRequest)
+    print(warmupResult)
+    results = defaultdict(lambda: [])
+    isPrefill = True
     while True:
-        dr = generate_pb2.DecodeRequest(batches=[cbatch])
-        resp = stub.Decode(dr)
-        generations, cbatch = resp.generations, resp.batch
-        toExit = False
+        if isPrefill:
+            prefill_request = generate_pb2.PrefillRequest(batch=pb_batch_with_inputs)
+            prefill_response = stub.Prefill(prefill_request)
+            generations, next_batch = (
+                prefill_response.generations,
+                prefill_response.batch,
+            )
+            isPrefill = False
+        else:
+            decode_request = generate_pb2.DecodeRequest(batches=[next_batch])
+            decode_response = stub.Decode(decode_request)
+            generations, next_batch = decode_response.generations, decode_response.batch
+
         for gen in generations:
             if gen.generated_text.text:
-                print("finished")
-                res = gen.generated_text.text
-                toExit = True
+                results[gen.request_id] += [gen.generated_text.text]
 
-        if toExit:
+        if all([g.generated_text.text for g in generations]):
             break
 
-    print(res)
+    for id in results:
+        print(str(id) + "=" * 30)
+        print("".join(results[id]))

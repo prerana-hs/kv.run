@@ -26,6 +26,7 @@ from text_generation_server.models.types import (
     Generation,
     GeneratedText,
 )
+from text_generation_server.utils import HeterogeneousNextTokenChooser
 from text_generation_server.utils.dist import MEMORY_FRACTION
 from dataclasses import dataclass
 from collections.abc import Iterable
@@ -36,73 +37,31 @@ tracer = trace.get_tracer(__name__)
 
 class RequestContext:
     def __init__(
-            self,
-            request_id: str,
-            input_ids: list[int],
-            tokenizer,
-            *,
-            temperature: float,
-            repetition_penalty: float,
-            top_p: float,
-            top_k: int,
-            maxlen: int,
-            stop_token_id: int,
-            is_stopped: bool,
-            request_kv_cache: RequestKvCache,
-            prefill_logprobs: bool = True,
-            lora_id: str = "empty",
+        self,
+        request_id: str,
+        input_ids: list[int],
+        *,
+        next_token_chooser_parameter: generate_pb2.NextTokenChooserParameters,
+        maxlen: int,
+        stop_token_id: int,
+        is_stopped: bool,
+        request_kv_cache: RequestKvCache,
+        prefill_logprobs: bool = True,
+        lora_id: str = "empty",
     ):
         self.request_id = request_id
-        self.temperature = temperature
-        self.repetition_penalty = repetition_penalty
-        self.top_p = top_p
-        self.top_k = top_k
         self.maxlen = maxlen
         self.stop_token_id = stop_token_id
         self.prefill_logprobs = prefill_logprobs
-
-        # Logits processing adapted from: https://github.com/lm-sys/FastChat/blob/bb7ca37c2bfad629ba4751dec188bdcdc2cf0c81/fastchat/serve/inference.py
-        self.logits_processor = transformers.LogitsProcessorList()
-        if temperature > 0 and temperature != 1.0:
-            self.logits_processor.append(
-                transformers.TemperatureLogitsWarper(temperature)
-            )
-        if repetition_penalty > 1.0:
-            self.logits_processor.append(
-                transformers.RepetitionPenaltyLogitsProcessor(repetition_penalty)
-            )
-        if 0 < top_p < 1.0:
-            self.logits_processor.append(transformers.TopPLogitsWarper(top_p))
-        if top_k > 0:
-            self.logits_processor.append(transformers.TopKLogitsWarper(top_k))
-
+        self.next_token_chooser_parameter = next_token_chooser_parameter
         self.output_ids = [int(x) for x in input_ids]
         self.prompt_len = len(self.output_ids)
         self.lora_id = lora_id
-        self.tokenizer = tokenizer
         self.prefix_offset = 0
         self.read_offset = 0
         self.is_stopped = is_stopped
         self.prefill_tokens: Optional[Tokens] = None
         self.request_kv_cache = request_kv_cache
-
-    def get_next_batch_token_id(self, logits: torch.Tensor) -> List[int]:
-        if self.logits_processor:
-            if self.repetition_penalty > 1.0:
-                t = torch.as_tensor([self.output_ids], device=logits.device)
-            else:
-                t = None
-            last_token_logits = self.logits_processor(t, logits)
-        else:
-            last_token_logits = logits
-
-        if self.temperature <= 0 or self.top_p <= 0:
-            _, indices = torch.topk(last_token_logits, 2)
-        else:
-            probs = torch.softmax(last_token_logits, dim=-1)
-            indices = torch.multinomial(probs, num_samples=2)
-        token = indices[:, 0].tolist()
-        return token
 
     def append_token(self, token_id: int):
         self.output_ids.append(token_id)
@@ -139,13 +98,13 @@ class FlashinferBatch:
 
 class FlashinferLM(Model):
     def __init__(
-            self,
-            model: torch.nn.Module,
-            tokenizer: PreTrainedTokenizerBase,
-            config: PretrainedConfig,
-            dtype: torch.dtype,
-            device: torch.device,
-            lora_ids: List[str],
+        self,
+        model: torch.nn.Module,
+        tokenizer: PreTrainedTokenizerBase,
+        config: PretrainedConfig,
+        dtype: torch.dtype,
+        device: torch.device,
+        lora_ids: List[str],
     ):
         self.device = device
         self.dtype = dtype
@@ -153,9 +112,9 @@ class FlashinferLM(Model):
         self.batch_cache = Cache()
 
         if (
-                torch.cuda.is_available()
-                and torch.cuda.device_count() == 1
-                and config.quantize != "bitsandbytes"
+            torch.cuda.is_available()
+            and torch.cuda.device_count() == 1
+            and config.quantize != "bitsandbytes"
         ):
             model = model.cuda()
 
@@ -182,7 +141,7 @@ class FlashinferLM(Model):
             self.loraManager.set_lora_weights(
                 lora_ids, self.model_config_for_lora, dtype
             )
-        
+
         self.kvCachePool = None
 
         super(FlashinferLM, self).__init__(
@@ -207,7 +166,7 @@ class FlashinferLM(Model):
         return list(self.loraManager.lora_weights_cpu)
 
     def decode_batch(
-            self, cachedBatchesPb: Iterable[generate_pb2.CachedBatch]
+        self, cachedBatchesPb: Iterable[generate_pb2.CachedBatch]
     ) -> Tuple[List[Generation], Optional[FlashinferBatch], Tuple[int, int], int]:
         start_concat = time.time_ns()
         batch = self._convertCachedBatch(cachedBatchesPb)
@@ -218,7 +177,7 @@ class FlashinferLM(Model):
         return generations, next_batch, timings, concat_ns
 
     def prefill_batch(
-            self, batchPb: generate_pb2.Batch
+        self, batchPb: generate_pb2.Batch
     ) -> Tuple[List[Generation], Optional[FlashinferBatch], Tuple[int, int]]:
         batch = self._convertPbBatch(batchPb)
         generations, next_batch, timings = self.generate_token(batch)
@@ -243,7 +202,9 @@ class FlashinferLM(Model):
 
             currentDevice = torch.cuda.current_device()
             total_free_memory, _ = torch.cuda.mem_get_info(currentDevice)
-            total_gpu_memory = torch.cuda.get_device_properties(currentDevice).total_memory
+            total_gpu_memory = torch.cuda.get_device_properties(
+                currentDevice
+            ).total_memory
             free_memory = max(
                 0, total_free_memory - (1 - MEMORY_FRACTION) * total_gpu_memory
             )
@@ -306,11 +267,7 @@ class FlashinferLM(Model):
             request_context = RequestContext(
                 request.id,
                 input_ids,
-                self.tokenizer,
-                temperature=parameters.temperature,
-                repetition_penalty=parameters.repetition_penalty,
-                top_p=parameters.top_p,
-                top_k=parameters.top_k,
+                next_token_chooser_parameter=parameters,
                 maxlen=min(request.stopping_parameters.max_new_tokens, 4096),
                 stop_token_id=self.tokenizer.eos_token_id,
                 is_stopped=False,
@@ -330,7 +287,7 @@ class FlashinferLM(Model):
         )
 
     def _convertCachedBatch(
-            self, cachedBatchesPb: Iterable[generate_pb2.CachedBatch]
+        self, cachedBatchesPb: Iterable[generate_pb2.CachedBatch]
     ) -> FlashinferBatch:
         batches: List[FlashinferBatch] = []
         for batch_pb in cachedBatchesPb:
@@ -352,19 +309,95 @@ class FlashinferLM(Model):
             request_contexts=request_contexts_combined,
         )
 
+    def _get_all_input_ids_tensor(
+        self,
+        all_input_ids_stacked: List[List[int]],
+        request_contexts: List[RequestContext],
+    ):
+        max_input_length = max(
+            [
+                (request_context.maxlen + request_context.prompt_len)
+                for request_context in request_contexts
+            ]
+        )
+        all_input_ids_padded = [
+            input_ids + [0] * (max_input_length - len(input_ids))
+            for input_ids in all_input_ids_stacked
+        ]
+        return torch.tensor(
+            all_input_ids_padded,
+            dtype=torch.long,
+            device=self.device,
+        )
+
+    def _get_next_batch_token_id_heterogeneous(
+        self,
+        request_contexts: List[RequestContext],
+        all_input_ids_tensor: torch.Tensor,
+        logits: torch.Tensor,
+    ) -> List[int]:
+        next_token_chooser_parameters = [
+            request_context.next_token_chooser_parameter
+            for request_context in request_contexts
+            if not request_context.is_stopped
+        ]
+        next_token_chooser = HeterogeneousNextTokenChooser(
+            watermark=[
+                parameter.watermark for parameter in next_token_chooser_parameters
+            ],
+            temperature=[
+                parameter.temperature for parameter in next_token_chooser_parameters
+            ],
+            repetition_penalty=[
+                parameter.repetition_penalty
+                for parameter in next_token_chooser_parameters
+            ],
+            frequency_penalty=[
+                parameter.frequency_penalty
+                for parameter in next_token_chooser_parameters
+            ],
+            top_k=[parameter.top_k for parameter in next_token_chooser_parameters],
+            top_p=[parameter.top_p for parameter in next_token_chooser_parameters],
+            typical_p=[
+                parameter.typical_p for parameter in next_token_chooser_parameters
+            ],
+            do_sample=[
+                parameter.do_sample for parameter in next_token_chooser_parameters
+            ],
+            seeds=[parameter.seed for parameter in next_token_chooser_parameters],
+            device=self.device,
+            dtype=self.dtype,
+            tokenizer=self.tokenizer,
+            grammars=[parameter.grammar for parameter in next_token_chooser_parameters],
+            grammar_types=[
+                parameter.grammar_type for parameter in next_token_chooser_parameters
+            ],
+            fsm_grammar_states=[0] * len(next_token_chooser_parameters),
+        )
+
+        return next_token_chooser(
+            all_input_ids_tensor,
+            logits,
+            0,
+            None,
+            None,
+        )
+
     def batch_type(self):
         return FlashinferBatch
 
     @tracer.start_as_current_span("generate_token")
     @torch.no_grad()
     def generate_token(
-            self, batch: FlashinferBatch
+        self, batch: FlashinferBatch
     ) -> Tuple[List[Generation], Optional[FlashinferBatch], Tuple[int, int]]:
         start = time.time_ns()
         input_ids, lora_ids, lora_lens = [], [], []
         request_kv_caches = []
+        all_input_ids_stacked: List[List[int]] = []
         for request_context in batch.request_contexts:
             if not request_context.is_stopped:
+                all_input_ids_stacked.append(request_context.output_ids)
                 if batch.is_prefill:
                     input_ids.extend(request_context.output_ids)
                 else:
@@ -379,6 +412,9 @@ class FlashinferLM(Model):
                     lora_ids.append(request_context.lora_id)
                     lora_lens.append(1)
 
+        all_input_ids_tensor = self._get_all_input_ids_tensor(
+            all_input_ids_stacked, batch.request_contexts
+        )
         input_ids_tensor = torch.tensor(
             input_ids,
             dtype=torch.long,
@@ -413,14 +449,19 @@ class FlashinferLM(Model):
         generations: List[Generation] = []
         num_stopped_requests = 0
         start_next_token_id = time.time_ns()
-        next_token_ids = request_context.get_next_batch_token_id(logits)
+
+        next_token_ids, next_token_logprobs, logprobs, _, _ = (
+            self._get_next_batch_token_id_heterogeneous(
+                batch.request_contexts, all_input_ids_tensor, logits
+            )
+        )
         next_token_id_ns = time.time_ns() - start_next_token_id
 
         for i, request_context in enumerate(batch.request_contexts):
             if request_context.is_stopped:
                 num_stopped_requests += 1
                 continue
-            next_token_id = next_token_ids[i-num_stopped_requests]
+            next_token_id = next_token_ids[i - num_stopped_requests]
             request_context.append_token(next_token_id)
             text = self.tokenizer.decode(
                 next_token_id,
@@ -440,7 +481,7 @@ class FlashinferLM(Model):
                     len(request_context.output_ids) - request_context.prompt_len + 1,
                     stop_reason,
                     None,
-                    )
+                )
                 request_context.is_stopped = True
                 request_context.request_kv_cache.release()
             else:
