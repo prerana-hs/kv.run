@@ -23,13 +23,13 @@ from text_generation_server.models_flashinfer.flashinfer_causal_lm import (
     FlashinferBatch,
 )
 import random, json
+from collections import defaultdict
 from test_cases import DEMO, LoraSpec
 
 if len(sys.argv) == 2:
     test = sys.argv[1]
 else:
-    # test = "llama-2"
-    test = "gemma"
+    # test = "gemma"
     # test = "llama-3"
     # test = 'llama-3-70'
     # test = "baichuan"
@@ -39,8 +39,8 @@ else:
     # test = 'qwen1.5-1.8'
     # test = 'qwen1.5-70'
     # test = 'qwen2-7'
-    # test = 'yi1.5-9b'
-    #test = "chatglm4"
+    test = "yi1.5-9b"
+    # test = "chatglm4"
 print("Testing " + test)
 
 # Load demo inputs
@@ -154,9 +154,9 @@ elif test == "yi1.5-9b":
     ]
 elif test == "gemma":
     requests = [
-        make_input("tjluyao/gemma-2b-it-math", "lora", id=0),
-        make_input("tjluyao/gemma-2b-it-math", "lora", id=1),
-        make_input("tjluyao/gemma-2b-it-math", "lora", id=2),
+        make_input("tjluyao/gemma-2b-it-math", "base", id=0),
+        make_input("tjluyao/gemma-2b-it-math", "base", id=1),
+        make_input("tjluyao/gemma-2b-it-math", "base", id=2),
     ]
     service = FlashinferGemma(
         model_id="google/gemma-2b-it",
@@ -290,7 +290,7 @@ elif test == "qwen2-7":
             promptOverride="给我讲个故事",
         ),
     ]
-    #service = FlashinferQwen2(model_id="Qwen/Qwen2-7B-Instruct", trust_remote_code=True)
+    # service = FlashinferQwen2(model_id="Qwen/Qwen2-7B-Instruct", trust_remote_code=True)
     service = FlashinferQwen2(model_id="Qwen/Qwen2-7B", trust_remote_code=True)
 
 elif test == "chatglm4":
@@ -309,7 +309,7 @@ print(service.get_lora_adapters())
 tokenizer = service.tokenizer
 
 batch = generate_pb2.Batch(id=0, requests=requests, size=len(requests))
-display_results = {}
+display_results = defaultdict(lambda: [])
 
 # Iterative generation: each step generates a token for each input in the batch
 isPrefill = True
