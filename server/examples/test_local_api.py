@@ -32,14 +32,14 @@ else:
     # test = "gemma"
     # test = "llama-3"
     # test = 'llama-3-70'
-    # test = "baichuan"
+    test = "baichuan"
     # test = "gemma"
     # test = 'mistral'
     # test = 'qwen1.5-7'
     # test = 'qwen1.5-1.8'
     # test = 'qwen1.5-70'
     # test = 'qwen2-7'
-    test = "yi1.5-9b"
+    # test = "yi1.5-9b"
     # test = "chatglm4"
 print("Testing " + test)
 
@@ -279,6 +279,7 @@ elif test == "baichuan":
         model_id="baichuan-inc/Baichuan2-7B-Chat",
         lora_ids=["tjluyao/baichuan2-7b-chat-lora1"],
         trust_remote_code=True,
+        dtype=torch.bfloat16,
     )
 elif test == "qwen2-7":
     # Todo: qwen2-7b instruct lora adapter
