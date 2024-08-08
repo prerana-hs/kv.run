@@ -467,6 +467,23 @@ def load_lora_weights_local(lora_id):
     print(f"model_path: {model_path}, config_path: {config_path}")
     return model_path, config_path
 
+def load_lora_weights_local(lora_id):
+    # load lora weights from local
+    try:
+        model_path = lora_id + '/adapter_model.bin'
+        # check if this file exists
+        with open(model_path, 'r') as f:
+            pass
+    except:
+        from safetensors.torch import load_file
+        model_path = lora_id + '/adapter_model.safetensors'
+        tmp = load_file(model_path, device="cpu")
+        model_path = model_path.replace('.safetensors', '.bin')
+        torch.save(tmp, model_path)
+    config_path = lora_id + '/adapter_config.json'
+    print(f"model_path: {model_path}, config_path: {config_path}")
+    return model_path, config_path
+
 class ModelLoraManager:
     def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap=32, model_type='llama'):
         self.lora_weights_gpu: Dict[str, ModelLoraWeight] = {}
@@ -491,9 +508,12 @@ class ModelLoraManager:
     ):
         for lora_id in lora_ids:
             if lora_id not in self.lora_weights_cpu:
-                model_path, config_path = load_lora_weights(lora_id)
                 try:
                     model_path, config_path = load_lora_weights(lora_id)
+                try:
+                    model_path, config_path = load_lora_weights(lora_id)
+                except:
+                    model_path, config_path = load_lora_weights_local(lora_id)
                 except:
                     model_path, config_path = load_lora_weights_local(lora_id)
                 raw_weights = torch.load(
@@ -505,12 +525,18 @@ class ModelLoraManager:
                     lora_weight = ModelLoraWeightPhi(model_config, lora_rank, dtype, "cpu")
                     converted_weights = self.__convert_weight_phi(raw_weights, lora_rank)   # lora_rank = 32 for the example model                   
                 else: 
+    
+                if self.model_type == 'phi':
+                    lora_weight = ModelLoraWeightPhi(model_config, lora_rank, dtype, "cpu")
+                    converted_weights = self.__convert_weight_phi(raw_weights, lora_rank)   # lora_rank = 32 for the example model                   
+                else: 
                     lora_weight = (
-                        ModelLoraWeight(model_config, lora_rank * 2, dtype, "cpu")
-                        if lora_rank < 16
-                        else ModelLoraWeight(model_config, lora_rank, dtype, "cpu")
-                    )
-                    converted_weights = self.__convert_weight(raw_weights, lora_rank)
+                            ModelLoraWeight(model_config, lora_rank * 2, dtype, "cpu")
+                            if lora_rank < 16
+                            else ModelLoraWeight(model_config, lora_rank, dtype, "cpu")
+                        )
+                        converted_weights = self.__convert_weight(raw_weights, lora_rank)
+
 
                 lora_weight.copy_from_tensors(converted_weights)
                 del converted_weights
@@ -546,6 +572,10 @@ class ModelLoraManager:
         for lora_id in lora_ids:
             loraweights.append(self.lora_weights_gpu[lora_id])
 
+        if self.model_type == 'phi':
+            return BatchedModelLoraWeightPhi(loraweights, lora_lens)
+        else:
+    
         if self.model_type == 'phi':
             return BatchedModelLoraWeightPhi(loraweights, lora_lens)
         else:
@@ -615,8 +645,39 @@ class ModelLoraManager:
                     if "B" in key:
                         complement = torch.zeros_like(weights[key])
                         weights[key] = torch.cat([weights[key], complement], dim=2)
-        return weights
+        return weights    
     
+    def __convert_weight_phi(self, weights, rank):
+        out_projA, out_projB = [], []
+        WqkvA, WqkvB = [], []
+        for key in weights.keys():
+            if "out_proj" in key:
+                if "A" in key:
+                    out_projA.append(weights[key].unsqueeze(0))
+                if "B" in key:
+                    out_projB.append(weights[key].unsqueeze(0))
+            if "Wqkv" in key:
+                if "A" in key:
+                    WqkvA.append(weights[key].unsqueeze(0))
+                if "B" in key:
+                    WqkvB.append(weights[key].unsqueeze(0))
+        weights = {
+            "out_proj.A": torch.cat(out_projA, dim=0) if out_projA else None,
+            "out_proj.B": torch.cat(out_projB, dim=0) if out_projB else None,
+            "Wqkv.A": torch.cat(WqkvA, dim=0) if WqkvA else None,
+            "Wqkv.B": torch.cat(WqkvB, dim=0) if WqkvB else None,
+        }
+        # if rank == 8:
+        #     for key in weights.keys():
+        #         if weights[key] is not None:
+        #             if "A" in key:
+        #                 complement = torch.zeros_like(weights[key])
+        #                 weights[key] = torch.cat([weights[key], complement], dim=1)
+        #             if "B" in key:
+        #                 complement = torch.zeros_like(weights[key])
+        #                 weights[key] = torch.cat([weights[key], complement], dim=2)
+        return weights
+
     def __convert_weight_phi(self, weights, rank):
         out_projA, out_projB = [], []
         WqkvA, WqkvB = [], []
