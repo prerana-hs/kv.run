@@ -290,7 +290,7 @@ display_results = {}
 while True:
     generations, _, _ = service.generate_token(FlashinferBatch.Empty(batch.id))
     for gen in generations:
-        print(gen.request_id, gen.tokens.texts)
+        # print(gen.request_id, gen.tokens.texts)
         if gen.prefill_tokens:
             display_results[gen.request_id] = [
                 "Prompt:\n"

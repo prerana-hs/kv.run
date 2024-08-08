@@ -214,6 +214,7 @@ class FlashinferLM(Model):
         dtype: torch.dtype,
         device: torch.device,
         lora_ids: List[str] = None,
+        model_type: str = "llama",
     ):
         self.device = device
         self.dtype = dtype
@@ -286,7 +287,7 @@ class FlashinferLM(Model):
             num_kv_heads=config.num_key_value_heads,
         )
 
-        self.loraManager = ModelLoraManager(self.model_config_for_lora, dtype)
+        self.loraManager = ModelLoraManager(self.model_config_for_lora, dtype, model_type=model_type)
         if lora_ids:
             self.loraManager.set_lora_weights(
                 lora_ids, self.model_config_for_lora or {}, dtype
