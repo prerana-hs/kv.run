@@ -311,7 +311,7 @@ DEMO["REILX/Qwen1.5-7B-Chat-750Mb-lora"] = DemoSpec(
 """,
 )
 
-DEMO["/scratch/hy2203/models/VictorNanka/phi-2-sft-lora"] = DemoSpec(
+DEMO["VictorNanka/phi-2-sft-lora"] = DemoSpec(
     weight_url="https://huggingface.co/01-ai/Yi-6B/blob/main/model.safetensors.index.json",
     system="Answer the following Grade School Math problem.",
     lora_template="<<SYS>>\n{system}\n<</SYS>>\n[INST] {question} [/INST]\n",
