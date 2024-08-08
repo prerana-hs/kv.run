@@ -248,11 +248,9 @@ class ModelLoraWeightPhi:
         self.out_proj.copy_from_tensor(ts["out_proj.A"], ts["out_proj.B"])
         # self.Wqkv.copy_from_tensor(ts["Wqkv.A"], ts["Wqkv.B"])
         self.q.copy_from_tensor(ts["Wqkv.A"], ts["Wqkv.B"][:, :2560])
-        print(f"q.shap: {self.q.wa.shape}, {self.q.wb.shape}")
         self.k.copy_from_tensor(ts["Wqkv.A"], ts["Wqkv.B"][:, 2560:5120])
-        print(f"k.shap: {self.k.wa.shape}, {self.k.wb.shape}")
         self.v.copy_from_tensor(ts["Wqkv.A"], ts["Wqkv.B"][:, 5120:])
-        print(f"v.shap: {self.v.wa.shape}, {self.v.wb.shape}")
+    
 
 
 class BatchedModelLoraWeight:
@@ -376,12 +374,25 @@ class BatchedModelLoraWeightPhi:
         self.rank = weights[0].out_proj.lora_rank
 
     # change this
-    def apply_lora_weight_out_proj(
-        self, out_proj: torch.Tensor, hidden_states: torch.Tensor, layer_idx: int
+    # def apply_lora_weight_out_proj(
+    #     self, out_proj: torch.Tensor, hidden_states: torch.Tensor, layer_idx: int
+    # ):
+    #     add_lora(
+    #         out_proj,
+    #         hidden_states,
+    #         self.out_proj.wa_ptr,
+    #         self.out_proj.wb_ptr,
+    #         self.segment,
+    #         layer_idx,
+    #         self.rank,
+    #     )
+
+    def apply_lora_weight_attn(
+        self, attn_projected: torch.Tensor, attn_raw: torch.Tensor, layer_idx: int
     ):
         add_lora(
-            out_proj,
-            hidden_states,
+            attn_projected,
+            attn_raw,
             self.out_proj.wa_ptr,
             self.out_proj.wb_ptr,
             self.segment,
@@ -457,18 +468,21 @@ def load_lora_weights_local(lora_id):
     return model_path, config_path
 
 class ModelLoraManager:
-    def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap=32):
+    def __init__(self, model_config: ModelConfigForLora, dtype, lora_cap=32, model_type='llama'):
         self.lora_weights_gpu: Dict[str, ModelLoraWeight] = {}
         self.lora_cap = lora_cap + 1  # one for empty
         self.defalut_rank = 16
         self.lora_weights_cpu = {}
-        # self.lora_weights_cpu["empty"] = ModelLoraWeight(
-        #     model_config, self.defalut_rank, dtype, "cpu"
-        # )
-        self.lora_weights_cpu["empty"] = ModelLoraWeightPhi(
+        self.model_type = model_type
+        if model_type == 'phi':
+            self.lora_weights_cpu["empty"] = ModelLoraWeightPhi(
             model_config, self.defalut_rank, dtype, "cpu"
         )
-
+        else:
+            self.lora_weights_cpu["empty"] = ModelLoraWeight(
+                model_config, self.defalut_rank, dtype, "cpu"
+            )
+        
     def set_lora_weights(
         self,
         lora_ids: List[str],
@@ -485,12 +499,12 @@ class ModelLoraManager:
                 raw_weights = torch.load(
                     model_path, map_location="cpu", weights_only=True
                 )
-                # print(raw_weights.keys())
                 lora_rank = peft.config.PeftConfigMixin.from_json_file(config_path)["r"]
 
-                model = 'phi'
-                # model = 'lora'
-                if model != 'phi':
+                if self.model_type == 'phi':
+                    lora_weight = ModelLoraWeightPhi(model_config, lora_rank, dtype, "cpu")
+                    converted_weights = self.__convert_weight_phi(raw_weights, lora_rank)   # lora_rank = 32 for the example model                   
+                else: 
                     lora_weight = (
                         ModelLoraWeight(model_config, lora_rank * 2, dtype, "cpu")
                         if lora_rank < 16
@@ -498,10 +512,6 @@ class ModelLoraManager:
                     )
                     converted_weights = self.__convert_weight(raw_weights, lora_rank)
 
-                else: 
-                    lora_weight = ModelLoraWeightPhi(model_config, lora_rank, dtype, "cpu")
-                    converted_weights = self.__convert_weight_phi(raw_weights, lora_rank)   # lora_rank = 32 for the example model
-                    # print("converted_weights: ", converted_weights)
                 lora_weight.copy_from_tensors(converted_weights)
                 del converted_weights
                 self.lora_weights_cpu[lora_id] = lora_weight
@@ -536,12 +546,10 @@ class ModelLoraManager:
         for lora_id in lora_ids:
             loraweights.append(self.lora_weights_gpu[lora_id])
 
-        # model = 'llama'
-        model = 'phi'
-        if model == 'llama':
-            return BatchedModelLoraWeight(loraweights, lora_lens)
-        else:
+        if self.model_type == 'phi':
             return BatchedModelLoraWeightPhi(loraweights, lora_lens)
+        else:
+            return BatchedModelLoraWeight(loraweights, lora_lens)
 
     def __convert_weight(self, weights, rank):
         qA, qB, kA, kB, vA, vB, oA, oB = [], [], [], [], [], [], [], []

@@ -206,7 +206,6 @@ class FlashPhiAttention(torch.nn.Module):
             cos,
             sin,
         )
-
         attn_outputs_raw = self.flashinferWrapper.computeAttention(
             q,
             k,
@@ -218,9 +217,10 @@ class FlashPhiAttention(torch.nn.Module):
             self.rotaryParams,
         )
         attn_outputs = self.o_proj(attn_outputs_raw)
-        loraWeight.apply_lora_weight_out_proj(
-            attn_outputs, attn_outputs_raw, self.layer_idx
-        )
+        # Note: Bug here, need to fix
+        # loraWeight.apply_lora_weight_attn(
+        #     attn_outputs, attn_outputs_raw, self.layer_idx
+        # )
         return attn_outputs
 
 
