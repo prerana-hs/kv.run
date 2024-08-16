@@ -861,6 +861,16 @@ def get_model(
             )
         else:
             raise NotImplementedError(FLASH_ATT_ERROR_MESSAGE.format("LlavaNext"))
+        
+    if model_type == "chatglm":
+        return CausalLM(
+            model_id,
+            revision,
+            quantize=quantize,
+            speculator=speculator,
+            dtype=dtype,
+            trust_remote_code=trust_remote_code,
+        )       
 
     if sharded:
         raise NotImplementedError("sharded is not supported for AutoModel")
