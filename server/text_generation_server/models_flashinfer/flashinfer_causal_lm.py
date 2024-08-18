@@ -31,6 +31,7 @@ from text_generation_server.utils.dist import MEMORY_FRACTION
 from dataclasses import dataclass
 from collections.abc import Iterable
 from text_generation_server.cache import Cache
+from transformers import AutoModelForCausalLM
 
 tracer = trace.get_tracer(__name__)
 
@@ -74,11 +75,12 @@ class RequestContext:
         return None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class FlashinferBatch:
     batch_id: int
     is_prefill: bool
     request_contexts: List[RequestContext]
+    past_key_values: Optional[torch.Tensor]
 
     def to_pb(self) -> generate_pb2.CachedBatch:
 
@@ -111,12 +113,19 @@ class FlashinferLM(Model):
         self.model_config = config
         self.batch_cache = Cache()
 
-        if (
-            torch.cuda.is_available()
-            and torch.cuda.device_count() == 1
-            and config.quantize != "bitsandbytes"
-        ):
-            model = model.cuda()
+        # if (
+        #     torch.cuda.is_available()
+        #     and torch.cuda.device_count() == 1
+        #     and config.quantize != "bitsandbytes"
+        # ):
+        #     model = model.cuda()
+        
+        model = AutoModelForCausalLM.from_pretrained(
+            "THUDM/glm-4-9b-chat",
+            torch_dtype=dtype,
+            trust_remote_code=True,
+        )
+        model = model.cuda()
 
         if tokenizer.pad_token_id is None:
             if config.pad_token_id is not None:
@@ -283,7 +292,7 @@ class FlashinferLM(Model):
             request_contexts.append(request_context)
 
         return FlashinferBatch(
-            batch_id=batchPb.id, is_prefill=True, request_contexts=request_contexts
+            batch_id=batchPb.id, is_prefill=True, request_contexts=request_contexts, past_key_values=None
         )
 
     def _convertCachedBatch(
@@ -385,6 +394,34 @@ class FlashinferLM(Model):
 
     def batch_type(self):
         return FlashinferBatch
+    
+    def _getPositionIdsAndMaxSeqLenForPrefill(
+        self, seq_lens: torch.Tensor, device
+    ) -> Tuple[torch.Tensor, int]:
+        if seq_lens.numel() == 0:
+            return torch.tensor([], dtype=torch.int32, device=device), 0
+        position_ids = torch.cat(
+            [
+                torch.arange(seq_len, dtype=torch.int32, device=device)
+                for seq_len in seq_lens
+            ]
+        )
+        max_seq_len = torch.max(seq_lens).item()
+        return position_ids, max_seq_len
+
+    def _getPositionIdsAndMaxSeqLenForDecode(
+        self, seq_lens: torch.Tensor, device
+    ) -> Tuple[torch.Tensor, int]:
+        if seq_lens.numel() == 0:
+            return torch.tensor([], dtype=torch.int32, device=device), 0
+        position_ids = torch.cat(
+            [
+                torch.tensor([seq_len - 1], dtype=torch.int32, device=device)
+                for seq_len in seq_lens
+            ]
+        )
+        max_seq_len = torch.max(seq_lens).item()
+        return position_ids, max_seq_len
 
     @tracer.start_as_current_span("generate_token")
     @torch.no_grad()
@@ -430,13 +467,27 @@ class FlashinferLM(Model):
             if lora_ids
             else None
         )
-        raw_logits, _ = self.model(
-            input_ids_tensor,
-            self.kvCachePool,
-            batch.is_prefill,
-            batch_position,
-            loraWeights,
+        
+        # raw_logits, _ = self.model(
+        #     input_ids_tensor,
+        #     self.kvCachePool,
+        #     batch.is_prefill,
+        #     batch_position,
+        #     loraWeights,
+        # )
+        
+        position_ids, max_seq_len = (
+            self._getPositionIdsAndMaxSeqLenForPrefill(
+                batch_position.seq_lens, self.device
+            )
+            if batch.is_prefill
+            else self._getPositionIdsAndMaxSeqLenForDecode(
+                batch_position.seq_lens, self.device
+            )
         )
+        
+        _, _, past_key_values, raw_logits, _ = self.model.forward(input_ids=input_ids_tensor, position_ids=position_ids, past_key_values=batch.past_key_values, use_cache=True, return_dict=True)
+        batch.past_key_values = past_key_values
 
         start_decode = time.time_ns()
         logits = (
