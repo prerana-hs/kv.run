@@ -39,7 +39,7 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
             repetition_penalty=1.1,
         ),
         stopping_parameters=generate_pb2.StoppingCriteriaParameters(
-            max_new_tokens=2048, stop_sequences=[], ignore_eos_token=True
+            max_new_tokens=50, stop_sequences=[], ignore_eos_token=True
         ),
         lora_id=lora_id,
     )
@@ -53,12 +53,12 @@ requests = [
         id=0,
         promptOverride="What is deep learning?",
     ),
-    make_input(
-        "tjluyao/gemma-2b-it-math",
-        "base",
-        id=1,
-        promptOverride="Give me a breif introduction to Byznatine Fault Tolerance and why it is important?",
-    ),
+    # make_input(
+    #     "tjluyao/gemma-2b-it-math",
+    #     "base",
+    #     id=1,
+    #     promptOverride="Give me a breif introduction to Byznatine Fault Tolerance and why it is important?",
+    # ),
 ]
 
 # Assemble input batch
@@ -69,7 +69,7 @@ with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
     stub = generate_pb2_grpc.TextGenerationServiceStub(channel)
     warmupRequest = generate_pb2.WarmupRequest(
         batch=pb_batch_with_inputs,
-        max_total_tokens=2048,
+        max_total_tokens=50,
         max_prefill_tokens=1024 * 10,
         max_input_length=1024,
     )

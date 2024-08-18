@@ -120,11 +120,6 @@ class FlashinferLM(Model):
         # ):
         #     model = model.cuda()
         
-        model = AutoModelForCausalLM.from_pretrained(
-            "THUDM/glm-4-9b-chat",
-            torch_dtype=dtype,
-            trust_remote_code=True,
-        )
         model = model.cuda()
 
         if tokenizer.pad_token_id is None:
@@ -338,6 +333,27 @@ class FlashinferLM(Model):
             dtype=torch.long,
             device=self.device,
         )
+        
+    def _get_all_input_ids_tensor_no_pad(
+        self,
+        all_input_ids_stacked: List[List[int]],
+        request_contexts: List[RequestContext],
+    ):
+        max_input_length = max(
+            [
+                (request_context.prompt_len)
+                for request_context in request_contexts
+            ]
+        )
+        all_input_ids_padded = [
+            input_ids + [0] * (max_input_length - len(input_ids))
+            for input_ids in all_input_ids_stacked
+        ]
+        return torch.tensor(
+            all_input_ids_padded,
+            dtype=torch.long,
+            device=self.device,
+        )
 
     def _get_next_batch_token_id_heterogeneous(
         self,
@@ -486,7 +502,9 @@ class FlashinferLM(Model):
             )
         )
         
-        _, _, past_key_values, raw_logits, _ = self.model.forward(input_ids=input_ids_tensor, position_ids=position_ids, past_key_values=batch.past_key_values, use_cache=True, return_dict=True)
+        all_inputs = self._get_all_input_ids_tensor_no_pad(all_input_ids_stacked, batch.request_contexts)
+        
+        _, _, past_key_values, raw_logits, _ = self.model.forward(input_ids=all_inputs, position_ids=position_ids, past_key_values=batch.past_key_values, use_cache=True, return_dict=True)
         batch.past_key_values = past_key_values
 
         start_decode = time.time_ns()

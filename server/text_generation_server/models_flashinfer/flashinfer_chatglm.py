@@ -1,7 +1,7 @@
 import torch
 import torch.distributed
 from typing import Optional, List
-from transformers import AutoTokenizer, AutoConfig
+from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 from text_generation_server.models_flashinfer.flashinfer_causal_lm import FlashinferLM
 from text_generation_server.models_flashinfer.custom_modeling.flashinfer_chatglm_modeling import (
     ChatGLMConfig,
@@ -46,12 +46,18 @@ class FlashinferChatGLM(FlashinferLM):
 
         torch.distributed.barrier(group=process_group)
 
-        filenames = weight_files(model_id, revision=revision, extension=".safetensors")
-        weights = Weights(filenames, device, dtype, process_group=process_group)
-        if chatglmConfig.quantize in ["gptq", "awq"]:
-            weights._set_gptq_params(model_id, revision)
+        # filenames = weight_files(model_id, revision=revision, extension=".safetensors")
+        # weights = Weights(filenames, device, dtype, process_group=process_group)
+        # if chatglmConfig.quantize in ["gptq", "awq"]:
+        #     weights._set_gptq_params(model_id, revision)
 
-        model = FlashChatGLMForCausalLM(chatglmConfig, weights)
+        # model = FlashChatGLMForCausalLM(chatglmConfig, weights)
+        
+        model = AutoModelForCausalLM.from_pretrained(
+            "THUDM/glm-4-9b-chat",
+            torch_dtype=dtype,
+            trust_remote_code=True,
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
         super(FlashinferChatGLM, self).__init__(
             model=model,
