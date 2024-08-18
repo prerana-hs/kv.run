@@ -311,6 +311,7 @@ class FlashinferLM(Model):
             batch_id=batches[0].batch_id,
             is_prefill=False,
             request_contexts=request_contexts_combined,
+            past_key_values=batches[0].past_key_values,
         )
 
     def _get_all_input_ids_tensor(
@@ -503,8 +504,17 @@ class FlashinferLM(Model):
         )
         
         all_inputs = self._get_all_input_ids_tensor_no_pad(all_input_ids_stacked, batch.request_contexts)
+        position_ids = position_ids.unsqueeze(0)
+        attention_mask = torch.ones(all_inputs.shape)
         
-        _, _, past_key_values, raw_logits, _ = self.model.forward(input_ids=all_inputs, position_ids=position_ids, past_key_values=batch.past_key_values, use_cache=True, return_dict=True)
+        if not batch.is_prefill:
+            all_inputs = all_inputs[:, -1:]
+            position_ids = position_ids[:, -1:]
+        
+        outputs = self.model.forward(input_ids=all_inputs, attention_mask=attention_mask, past_key_values=batch.past_key_values, use_cache=True, return_dict=True, position_ids=position_ids)
+        raw_logits, past_key_values = outputs.logits, outputs.past_key_values
+        raw_logits = raw_logits.squeeze(0)
+        
         batch.past_key_values = past_key_values
 
         start_decode = time.time_ns()
