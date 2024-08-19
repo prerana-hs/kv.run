@@ -73,7 +73,7 @@ def make_input(lora_id, lora_or_base, id=0, promptOverride=None):
             top_k=10,
             top_p=0.9,
             typical_p=0.9,
-            repetition_penalty=1.1,
+            repetition_penalty=10.1,
         ),
         stopping_parameters=generate_pb2.StoppingCriteriaParameters(
             max_new_tokens=2048, stop_sequences=[], ignore_eos_token=True
@@ -301,7 +301,7 @@ elif test == "chatglm4":
             "abcdabcd987/gsm8k-llama2-7b-lora-16",
             "base",
             id=0,
-            promptOverride="给我讲个故事",
+            promptOverride="What is deep learning?",
         ),
     ]
     service = FlashinferChatGLM(model_id="THUDM/glm-4-9b-chat", trust_remote_code=True)

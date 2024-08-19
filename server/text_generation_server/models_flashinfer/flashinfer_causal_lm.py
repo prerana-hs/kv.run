@@ -435,7 +435,7 @@ class FlashinferLM(Model):
             self.kvCachePool,
             batch.is_prefill,
             batch_position,
-            loraWeights,
+            None,
         )
 
         start_decode = time.time_ns()
