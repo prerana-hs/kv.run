@@ -20,13 +20,15 @@ import base64
 from text_generation_server.pb import generate_pb2
 tracer = trace.get_tracer(__name__)
 
-from .flashinfer_causal_lm import (
-    FlashinferLM, 
-    FlashinferBatch,
+from text_generation_server.models_flashinfer.flashinfer_causal_lm import FlashinferBatch
+from text_generation_server.models_flashinfer.flashinfer_llama import FlashinferLlama
+
+from text_generation_server.models.causal_lm import (
     NextTokenChooser,
     StoppingCriteria,
     CausalLMBatch,
 )
+
 IMAGES = re.compile(r"!\[[^\]]*\]\((.*?)\s*(\"(?:.*[^\"])\")?\s*\)")
 def split(string) -> List[Dict[str, str]]:
     parts = []
@@ -49,7 +51,7 @@ def load_data_uri(image_uri: str) -> Image.Image:
     image = Image.open(BytesIO(content))
     return image
 
-@dataclass
+@dataclass(frozen=True)
 class LlavaBatch(FlashinferBatch):
     pixel_values: Optional[List[torch.Tensor]] = None
     pixel_attention_mask: Optional[List[torch.Tensor]] = None
@@ -225,17 +227,14 @@ class LlavaLM(Model):
         model_id: str = None,
         revision: Optional[str] = None,
         quantize: Optional[str] = None,
-        use_medusa: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
         trust_remote_code: bool = False
     ):
-        self.language_model = FlashinferLM(
-            model_type= 'llama',
+        self.language_model = FlashinferLlama(
             model_id= model_id,
             lora_ids= None, 
             revision= revision,
             quantize= quantize,
-            use_medusa= use_medusa,
             dtype= dtype,
             trust_remote_code= trust_remote_code, 
         )
