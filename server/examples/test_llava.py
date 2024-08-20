@@ -1,9 +1,9 @@
-from text_generation_server.pb import generate_pb2_grpc, generate_pb2
+from text_generation_server.pb import generate_pb2
 from text_generation_server.models_flashinfer.flashinfer_llava import LlavaLM, LlavaBatch
 import random, torch
 import base64
 
-model = LlavaLM(model_id="liuhaotian/llava-v1.5-7b")
+model = LlavaLM(model_id="llava-hf/llava-v1.6-vicuna-7b-hf")
 tokenizer = model.language_model.tokenizer
 processor = model.vision_model.image_processor
 

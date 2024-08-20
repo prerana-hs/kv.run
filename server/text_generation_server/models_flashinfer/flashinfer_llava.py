@@ -1,7 +1,7 @@
 # Modified from Llava Official Repo
 # Editor: Junyi Shen
 
-import torch, json, time, re
+import torch, time, re
 from opentelemetry import trace
 from typing import Optional, Tuple, List, Type, Dict
 from text_generation_server.models import Model
@@ -11,8 +11,8 @@ from text_generation_server.models.types import (
     GeneratedText,
 )
 from dataclasses import dataclass
-from huggingface_hub import hf_hub_download
-from transformers import PreTrainedTokenizerBase
+from transformers import PreTrainedTokenizerBase, AutoConfig, AutoModel
+from transformers.models.llava.modeling_llava import LlavaMultiModalProjector
 from loguru import logger
 from io import BytesIO
 from PIL import Image
@@ -224,12 +224,21 @@ class LlavaBatch(FlashinferBatch):
 class LlavaLM(Model):
     def __init__(
         self,
-        model_id: str = None,
+        model_id: str,
         revision: Optional[str] = None,
         quantize: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
         trust_remote_code: bool = False
-    ):
+    ):  
+        # Initialize LlavaLM
+        self.config = AutoConfig.from_pretrained(model_id)
+        self.vision_tower = AutoModel.from_config(self.config.vision_config)
+        self.multi_modal_projector = LlavaMultiModalProjector(self.config)
+        self.vocab_size = self.config.text_config.vocab_size
+        
+        llama_config = AutoConfig.from_pretrained('lmsys/vicuna-7b-v1.5')
+        setattr(self.config, 'num_attention_heads', llama_config.num_attention_heads)
+        
         self.language_model = FlashinferLlama(
             model_id= model_id,
             lora_ids= None, 
@@ -238,37 +247,13 @@ class LlavaLM(Model):
             dtype= dtype,
             trust_remote_code= trust_remote_code, 
         )
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model_id = model_id
-        with open(hf_hub_download(model_id, filename='config.json')) as f:
-            mm_config = json.loads(f.read())
-        self.vision_model = self.build_vision_model(mm_config)
-        self.vision_model.to(self.device).eval()
-        self.projector = self.build_projector(mm_config)
-        self.projector.to(self.device).eval()
+        
+        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.id_embedder = self.language_model.model.model.embed_tokens
-        self.additional_init_length = 576
+        self.vision_feature_select_strategy = self.config.vision_feature_select_strategy
+
         logger.info(f"Initialized LlavaLM with model_id: {model_id}")
-
-    def build_vision_model(self, model_config, **kwargs):
-        from .llava_models.encoder.encoder import CLIPVisionTower
-        mm_vision_tower = "openai/clip-vit-large-patch14-336"
-        return CLIPVisionTower(mm_vision_tower, args=model_config, **kwargs)
-    
-    def build_projector(self, model_config, **kwargs):
-        from .llava_models.projector.builder import build_vision_projector
-        projector = build_vision_projector(model_config, **kwargs)
-        model_path = hf_hub_download(self.model_id, filename='mm_projector.bin')
-        state_dict = torch.load(model_path)
-        new_state_dict = {
-            '0.weight': state_dict['model.mm_projector.0.weight'],
-            '0.bias': state_dict['model.mm_projector.0.bias'],
-            '2.weight': state_dict['model.mm_projector.2.weight'],
-            '2.bias': state_dict['model.mm_projector.2.bias'],
-        }
-        projector.load_state_dict(new_state_dict)
-        return projector
-
+        
     @property
     def batch_type(self) -> Type[LlavaBatch]:
         return LlavaBatch
@@ -293,19 +278,27 @@ class LlavaLM(Model):
         
     @torch.no_grad()
     def prefill_token(
-        self, batch: LlavaBatch
+        self, 
+        batch: LlavaBatch, 
     ):
         logger.info('Prefilling token')
         ids = self.language_model.add_request(batch)
-        img_features = batch.pixel_values
-        img_features = self.vision_model(img_features)
-        if self.projector:
-            img_features = self.projector(img_features)
-        
-        print(img_features.shape)
+        image_outputs = self.vision_tower(batch.pixel_values, output_hidden_states=True)
+        selected_image_feature = image_outputs.hidden_states[self.config.vision_feature_layer]
+
+        if self.vision_feature_select_strategy == "default":
+            selected_image_feature = selected_image_feature[:, 1:]
+        elif self.vision_feature_select_strategy == "full":
+            selected_image_feature = selected_image_feature
+        else:
+            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+
+        image_features = self.multi_modal_projector(selected_image_feature)
         input_ids = torch.tensor(batch.input_ids, device=self.device)
-        input_embeddings = self.id_embedder(input_ids)
-        input_embeddings = torch.cat([img_features,input_embeddings], dim=1).half()
+        inputs_embeds = self.id_embedder(input_ids)
+        inputs_embeds = inputs_embeds.to(image_features.dtype)
+
+        input_embeddings = torch.cat([image_features,inputs_embeds], dim=1).half()
         lens = [input_embeddings.size(1) for _ in batch.requests]
 
         batchKvCache = self.language_model.modelKvCache.getOrCreate(batch.batch_id)

@@ -56,6 +56,10 @@ class FlashinferLlama(FlashinferLM):
         )
         config.quantize = quantize
         config.speculator = None
+        
+        if not hasattr(config, "num_attention_heads"):
+            config.num_attention_heads = 32
+            
         if not hasattr(config, "num_key_value_heads"):
             config.num_key_value_heads = config.num_attention_heads
 
