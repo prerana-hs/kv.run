@@ -155,11 +155,13 @@ class ChatGLMMLP(nn.Module):
     def forward(self, hidden_states, loraWeight: BatchedModelLoraWeight):
         # [s, b, 3hp]
         up = self.up_proj(hidden_states)
-        loraWeight.apply_lora_weight_gate(up, hidden_states, self.layer_idx)
+        if loraWeight:
+            loraWeight.apply_lora_weight_gate(up, hidden_states, self.layer_idx)
         up = self.activation_func(up)
         # [s, b, h]
         down = self.down_proj(up)
-        loraWeight.apply_lora_weight_down(down, up, self.layer_idx)
+        if loraWeight:
+            loraWeight.apply_lora_weight_down(down, up, self.layer_idx)
         return down
 
 
@@ -277,7 +279,8 @@ class FlashChatGLMAttention(nn.Module):
         k = k_proj.contiguous()
         v = v_proj.contiguous()
 
-        loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
+        if loraWeight:
+            loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
 
         attn_outputs_raw = self.flashinferWrapper.computeAttention(
             q,
@@ -289,7 +292,8 @@ class FlashChatGLMAttention(nn.Module):
             self.rotaryParams,
         )
         attn_outputs = self.o_proj(attn_outputs_raw)
-        loraWeight.apply_lora_weight_attn(
+        if loraWeight:
+            loraWeight.apply_lora_weight_attn(
             attn_outputs, attn_outputs_raw, self.layer_idx
         )
         return attn_outputs

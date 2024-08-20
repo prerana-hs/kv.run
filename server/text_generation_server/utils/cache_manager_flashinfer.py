@@ -2,6 +2,8 @@ from typing import Set, List
 import math
 import torch
 
+PAGE_LEN: int = 16
+
 
 class KvCacheBatchPosition:
     def __init__(
@@ -42,6 +44,9 @@ class KvCachePool:
         self.max_pages = max_pages
         self.page_len = page_len
         self.free_page_mask = torch.ones(max_pages, dtype=torch.bool, device="cpu")
+
+    def num_free_pages(self):
+        return self.free_page_mask.sum()
 
     def allocate(self, num_pages: int):
         free_page_indices = self.free_page_mask.nonzero()
