@@ -313,24 +313,40 @@ class FlashChatGLMAttention(nn.Module):
         if loraWeight:
             loraWeight.apply_lora_weight_kvq(q, k, v, hidden_states, self.layer_idx)
 
-        self.rotary_emb(
-            q.view(
+        q_multi_head = q.view(
                 -1,
                 self.flashinferWrapper.num_attention_heads,
                 self.flashinferWrapper.head_dim,
-            ),
-            k.view(
+            )
+        
+        k_multi_head = k.view(
                 -1,
                 self.flashinferWrapper.num_key_value_heads,
                 self.flashinferWrapper.head_dim,
-            ),
+            )
+        
+        v_multi_head = v.view(
+                -1,
+                self.flashinferWrapper.num_key_value_heads,
+                self.flashinferWrapper.head_dim,
+            )
+        
+        torch.save(q_multi_head, "query_layer_before_flashinfer")
+        torch.save(k_multi_head, "key_layer_before_flashinfer")
+        torch.save(cos, "cos")
+        torch.save(sin, "sin")
+        self.rotary_emb(
+            q_multi_head,
+            k_multi_head,
             cos,
             sin,
         )
-        attn_outputs_raw = self.flashinferWrapper.computeAttention(
-            q,
-            k,
-            v,
+        torch.save(q_multi_head, "query_layer_after_flashinfer")
+        torch.save(k_multi_head, "key_layer_after_flashinfer")
+        attn_outputs_raw = self.flashinferWrapper.computeAttention2(
+            q_multi_head,
+            k_multi_head,
+            v_multi_head,
             kvCachePool.cache_data[self.layer_idx],
             is_prefill,
             batch_position,

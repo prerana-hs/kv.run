@@ -91,6 +91,25 @@ class FlashinferAttentionWrapper:
         else:
             self.decode_wrapper.end_forward()
 
+    def computeAttention2(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        cacheData: torch.Tensor,
+        is_prefill: bool,
+        batchPosition: KvCacheBatchPosition,
+        rotaryParams: AttentionRotaryParams,
+    ):
+        q, k, v = self._pad_qkv(q, k, v)
+        attn_output = (
+            self._batchPrefill(q, k, v, cacheData, batchPosition, rotaryParams)
+            if is_prefill
+            else self._batchDecode(q, k, v, cacheData, batchPosition, rotaryParams)
+        )
+
+        return self._unpad_attention(attn_output, batchPosition.total_seq_len)
+
     def computeAttention(
         self,
         q: torch.Tensor,
