@@ -430,6 +430,8 @@ class FlashinferLM(Model):
             if lora_ids
             else None
         )
+        
+        torch.save(input_ids_tensor, "flashinfer_input_ids")
         raw_logits, _ = self.model(
             input_ids_tensor,
             self.kvCachePool,
@@ -437,6 +439,7 @@ class FlashinferLM(Model):
             batch_position,
             None,
         )
+        torch.save(raw_logits, "flashinfer_prefill_out")
 
         start_decode = time.time_ns()
         logits = (

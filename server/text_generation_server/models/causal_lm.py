@@ -583,12 +583,14 @@ class CausalLM(Model):
         # slice the attention mask to the correct shape
         attention_mask = batch.attention_mask[:, : -batch.padding_right_offset]
 
+        torch.save(batch.input_ids, "causal_input_ids")
         logits, speculative_logits, past = self.forward(
             batch.input_ids,
             attention_mask,
             batch.position_ids,
             batch.past_key_values,
         )
+        torch.save(logits, "causal_prefill_res")
 
         # Results
         generations: List[Generation] = []

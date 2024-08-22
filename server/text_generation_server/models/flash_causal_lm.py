@@ -1028,11 +1028,15 @@ class FlashCausalLM(Model):
             batch.block_tables_tensor = block_tables_tensor
             batch.slots = slots
 
+        torch.save(batch.input_ids, "flash_input_ids")
         try:
             out, speculative_logits = self.forward(batch)
         except Exception as e:
             del batch
             raise e
+        
+        # import code; code.interact(local=locals())
+        torch.save(out, "flash_prefill_out")
 
         start_decode = time.time_ns()
         if prefill:

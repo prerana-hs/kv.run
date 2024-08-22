@@ -53,12 +53,12 @@ requests = [
         id=0,
         promptOverride="What is deep learning?",
     ),
-    make_input(
-        "tjluyao/gemma-2b-it-math",
-        "base",
-        id=1,
-        promptOverride="Give me a breif introduction to Byznatine Fault Tolerance and why it is important?",
-    ),
+    # make_input(
+    #     "tjluyao/gemma-2b-it-math",
+    #     "base",
+    #     id=1,
+    #     promptOverride="Give me a breif introduction to Byznatine Fault Tolerance and why it is important?",
+    # ),
 ]
 
 # Assemble input batch
@@ -75,29 +75,29 @@ with grpc.insecure_channel("unix:///tmp/text-generation-server-0") as channel:
     )
     warmupResult = stub.Warmup(warmupRequest)
     print(warmupResult)
-    results = defaultdict(lambda: [])
-    isPrefill = True
-    while True:
-        if isPrefill:
-            prefill_request = generate_pb2.PrefillRequest(batch=pb_batch_with_inputs)
-            prefill_response = stub.Prefill(prefill_request)
-            generations, next_batch = (
-                prefill_response.generations,
-                prefill_response.batch,
-            )
-            isPrefill = False
-        else:
-            decode_request = generate_pb2.DecodeRequest(batches=[next_batch])
-            decode_response = stub.Decode(decode_request)
-            generations, next_batch = decode_response.generations, decode_response.batch
+    # results = defaultdict(lambda: [])
+    # isPrefill = True
+    # while True:
+    #     if isPrefill:
+    #         prefill_request = generate_pb2.PrefillRequest(batch=pb_batch_with_inputs)
+    #         prefill_response = stub.Prefill(prefill_request)
+    #         generations, next_batch = (
+    #             prefill_response.generations,
+    #             prefill_response.batch,
+    #         )
+    #         isPrefill = False
+    #     else:
+    #         decode_request = generate_pb2.DecodeRequest(batches=[next_batch])
+    #         decode_response = stub.Decode(decode_request)
+    #         generations, next_batch = decode_response.generations, decode_response.batch
 
-        for gen in generations:
-            if gen.generated_text.text:
-                results[gen.request_id] += [gen.generated_text.text]
+    #     for gen in generations:
+    #         if gen.generated_text.text:
+    #             results[gen.request_id] += [gen.generated_text.text]
 
-        if all([g.generated_text.text for g in generations]):
-            break
+    #     if all([g.generated_text.text for g in generations]):
+    #         break
 
-    for id in results:
-        print(str(id) + "=" * 30)
-        print("".join(results[id]))
+    # for id in results:
+    #     print(str(id) + "=" * 30)
+    #     print("".join(results[id]))
