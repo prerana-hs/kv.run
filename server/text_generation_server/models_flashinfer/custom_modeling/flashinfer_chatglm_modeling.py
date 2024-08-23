@@ -38,6 +38,8 @@ from text_generation_server.layers.rotary import (
     PositionRotaryEmbedding,
 )
 
+import rotary_emb
+
 class FlashinferBatch:
     def __init__(self, seq_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len):
         self.seq_indptr = seq_indptr
@@ -344,10 +346,22 @@ class FlashChatGLMAttention(nn.Module):
         # torch.save(q_multi_head, "query_layer_after_flashinfer")
         # torch.save(k_multi_head, "key_layer_after_flashinfer")
         
-        q_after_rope, k_after_rope = self.wrap_causal_rotary(q_multi_head, k_multi_head, cos, sin)
+        # q_after_rope, k_after_rope = self.wrap_causal_rotary(q_multi_head, k_multi_head, cos, sin)
+        # attn_outputs_raw = self.flashinferWrapper.computeAttention2(
+        #     q_after_rope.contiguous(),
+        #     k_after_rope.contiguous(),
+        #     v_multi_head,
+        #     kvCachePool.cache_data[self.layer_idx],
+        #     is_prefill,
+        #     batch_position,
+        #     self.rotaryParams,
+        # )
+        
+        self.compute_rotary_flash_attn(q_multi_head, cos, sin)
+        self.compute_rotary_flash_attn(k_multi_head, cos, sin)
         attn_outputs_raw = self.flashinferWrapper.computeAttention2(
-            q_after_rope.contiguous(),
-            k_after_rope.contiguous(),
+            q_multi_head,
+            k_multi_head,
             v_multi_head,
             kvCachePool.cache_data[self.layer_idx],
             is_prefill,
@@ -360,6 +374,16 @@ class FlashChatGLMAttention(nn.Module):
             attn_outputs, attn_outputs_raw, self.layer_idx
         )
         return attn_outputs
+    
+    def compute_rotary_flash_attn(self, x, cos, sin):
+        rotary_dim = cos.shape[-1] * 2
+        even_positions = list(range(0, rotary_dim, 2))
+        odd_positions = list(range(1, rotary_dim, 2))
+
+        k1 = x[..., even_positions]
+        k2 = x[..., odd_positions]
+        rotary_emb.apply_rotary(k1, k2, cos, sin, k1, k2, False)
+        x[..., :rotary_dim] = torch.stack((k1, k2), dim=-1).flatten(start_dim=-2)
     
     def wrap_causal_rotary(self, q_multi_head: torch.Tensor, k_multi_head: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
         rotary_pos_emb_flashinfer = torch.cat((cos.transpose(1, 2), sin.transpose(1, 2)), dim=2).unsqueeze(0)

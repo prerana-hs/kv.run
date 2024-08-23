@@ -301,7 +301,7 @@ elif test == "chatglm4":
             "abcdabcd987/gsm8k-llama2-7b-lora-16",
             "base",
             id=0,
-            promptOverride="什么是深度学习?",
+            promptOverride="给我讲个故事",
         ),
     ]
     service = FlashinferChatGLM(model_id="THUDM/glm-4-9b-chat", trust_remote_code=True)
