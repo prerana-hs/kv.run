@@ -322,7 +322,7 @@ class FlashLlamaModel(torch.nn.Module):
         )
 
         self.norm = RMSNorm(
-            prefix="model.norm", weights=weights, eps=config.rms_norm_eps
+            prefix="model.norm" if not prefix else f"{prefix}.model.norm", weights=weights, eps=config.rms_norm_eps
         )
 
     def forward(

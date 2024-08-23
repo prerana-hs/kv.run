@@ -2,10 +2,11 @@ from text_generation_server.pb import generate_pb2
 from text_generation_server.models_flashinfer.flashinfer_llava import LlavaLM, LlavaBatch
 import random, torch
 import base64
+from collections import defaultdict
 
-model = LlavaLM(model_id="llava-hf/llava-v1.6-vicuna-7b-hf")
-tokenizer = model.language_model.tokenizer
-processor = model.vision_model.image_processor
+service = LlavaLM(model_id="llava-hf/llava-v1.6-vicuna-7b-hf")
+tokenizer = service.language_model.tokenizer
+processor = service.processor
 
 prompts = [
     'How many people are in the image?',
@@ -17,7 +18,7 @@ prompts = [
 ]
 
 # read image from local file
-image_path = "./build/server/examples/test.jpg"
+image_path = "server/examples/test.jpg"
 with open(image_path, "rb") as f:
     image = base64.b64encode(f.read()).decode("utf-8")
 
@@ -47,13 +48,41 @@ def make_input(image, id = 0):
 
 requests = [make_input(image, i) for i in range(1)]
 batch = generate_pb2.Batch(id = 0, requests = requests, size = len(requests))
-pb_batch = LlavaBatch.from_pb_processor(batch, tokenizer, processor, model.language_model.model_config, torch.float16, torch.device("cuda"))
-results = []
-while len(pb_batch.requests) > 0:
-    generations, pb_batch, _ = model.generate(pb_batch)
-    for gen in generations:
-        if gen.generated_text is not None:
-            results.append(gen.generated_text.text)
+service.language_model.warmup(batchPb=batch)
 
-for i, result in enumerate(results):
-    print(f"Request {i}: {result}\n")
+pb_batch = LlavaBatch.from_pb_processor(
+    batch, 
+    tokenizer, 
+    processor, 
+    service.language_model.model_config, 
+    torch.float16, 
+    torch.device("cuda"),
+    service.language_model,
+    )
+display_results = defaultdict(lambda: [])
+
+# Iterative generation: each step generates a token for each input in the batch
+isPrefill = True
+while True:
+    if isPrefill:
+        generations, next_batch, _ = service.prefill_batch(batch)
+        isPrefill = False
+    else:
+        generations, next_batch, _, _ = service.decode_batch([next_batch.to_pb()])
+
+    for gen in generations:
+        if gen.prefill_tokens:
+            display_results[gen.request_id] = [
+                "Prompt:\n"
+                + tokenizer.decode(gen.prefill_tokens.token_ids)
+                + "\nAnswer:\n"
+            ]
+        if gen.generated_text:
+            display_results[gen.request_id] += [gen.generated_text.text]
+    # Stop if all input generations are done
+    if all([g.generated_text for g in generations]):
+        break
+
+for id in display_results:
+    print(str(id) + "=" * 30)
+    print("".join(display_results[id]))

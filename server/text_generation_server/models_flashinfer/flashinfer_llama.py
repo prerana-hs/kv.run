@@ -57,6 +57,21 @@ class FlashinferLlama(FlashinferLM):
         config.quantize = quantize
         config.speculator = None
         
+        if not hasattr(config, "rms_norm_eps"):
+            config.rms_norm_eps = 1e-05
+        
+        if not hasattr(config, "intermediate_size"):
+            config.intermediate_size = 11008
+        
+        if not hasattr(config, "hidden_act"):
+            config.hidden_act = "silu"
+            
+        if not hasattr(config, "num_hidden_layers"):
+            config.num_hidden_layers = 32
+            
+        if not hasattr(config, "hidden_size"):
+            config.hidden_size = 4096
+        
         if not hasattr(config, "num_attention_heads"):
             config.num_attention_heads = 32
             
@@ -73,7 +88,7 @@ class FlashinferLlama(FlashinferLM):
         if config.quantize in ["gptq", "awq"]:
             weights._set_gptq_params(model_id, revision)
 
-        prefix = ""
+        prefix = "language_model" if 'llava' in model_id else ""
         model = FlashLlamaForCausalLM(prefix, config, weights)
         torch.distributed.barrier(group=self.process_group)
         super(FlashinferLlama, self).__init__(
