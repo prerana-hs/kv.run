@@ -331,21 +331,23 @@ class FlashChatGLMAttention(nn.Module):
                 self.flashinferWrapper.head_dim,
             )
         
-        torch.save(q_multi_head, "query_layer_before_flashinfer")
-        torch.save(k_multi_head, "key_layer_before_flashinfer")
-        torch.save(cos, "cos")
-        torch.save(sin, "sin")
-        self.rotary_emb(
-            q_multi_head,
-            k_multi_head,
-            cos,
-            sin,
-        )
-        torch.save(q_multi_head, "query_layer_after_flashinfer")
-        torch.save(k_multi_head, "key_layer_after_flashinfer")
+        # torch.save(q_multi_head, "query_layer_before_flashinfer")
+        # torch.save(k_multi_head, "key_layer_before_flashinfer")
+        # torch.save(cos, "cos")
+        # torch.save(sin, "sin")
+        # self.rotary_emb(
+        #     q_multi_head,
+        #     k_multi_head,
+        #     cos,
+        #     sin,
+        # )
+        # torch.save(q_multi_head, "query_layer_after_flashinfer")
+        # torch.save(k_multi_head, "key_layer_after_flashinfer")
+        
+        q_after_rope, k_after_rope = self.wrap_causal_rotary(q_multi_head, k_multi_head, cos, sin)
         attn_outputs_raw = self.flashinferWrapper.computeAttention2(
-            q_multi_head,
-            k_multi_head,
+            q_after_rope.contiguous(),
+            k_after_rope.contiguous(),
             v_multi_head,
             kvCachePool.cache_data[self.layer_idx],
             is_prefill,
@@ -358,6 +360,32 @@ class FlashChatGLMAttention(nn.Module):
             attn_outputs, attn_outputs_raw, self.layer_idx
         )
         return attn_outputs
+    
+    def wrap_causal_rotary(self, q_multi_head: torch.Tensor, k_multi_head: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
+        rotary_pos_emb_flashinfer = torch.cat((cos.transpose(1, 2), sin.transpose(1, 2)), dim=2).unsqueeze(0)
+        q_temp = self.apply_rotary_pos_emb(q_multi_head.transpose(0, 1).unsqueeze(0), rotary_pos_emb_flashinfer)
+        k_temp = self.apply_rotary_pos_emb(k_multi_head.transpose(0, 1).unsqueeze(0), rotary_pos_emb_flashinfer)
+        return q_temp.squeeze(0).transpose(0, 1), k_temp.squeeze(0).transpose(0, 1)
+
+    
+    def apply_rotary_pos_emb(self, x: torch.Tensor, rope_cache: torch.Tensor) -> torch.Tensor:
+        # x: [b, np, sq, hn]
+        b, np, sq, hn = x.size(0), x.size(1), x.size(2), x.size(3)
+        rot_dim = rope_cache.shape[-2] * 2
+        x, x_pass = x[..., :rot_dim], x[..., rot_dim:]
+        # truncate to support variable sizes
+        rope_cache = rope_cache[:, :sq]
+        xshaped = x.reshape(b, np, sq, rot_dim // 2, 2)
+        rope_cache = rope_cache.view(-1, 1, sq, xshaped.size(3), 2)
+        x_out2 = torch.stack(
+            [
+                xshaped[..., 0] * rope_cache[..., 0] - xshaped[..., 1] * rope_cache[..., 1],
+                xshaped[..., 1] * rope_cache[..., 0] + xshaped[..., 0] * rope_cache[..., 1],
+            ],
+            -1,
+        )
+        x_out2 = x_out2.flatten(3)
+        return torch.cat((x_out2, x_pass), dim=-1)
 
 
 class FlashChatGLM3Layer(nn.Module):
