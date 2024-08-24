@@ -1,4 +1,6 @@
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+
 sudo apt-get install unzip
 sudo apt-get install libssl-dev gcc -y
 PROTOC_ZIP=protoc-21.12-linux-x86_64.zip
