@@ -10,4 +10,6 @@ sudo unzip -o $PROTOC_ZIP -d /usr/local bin/protoc
 sudo unzip -o $PROTOC_ZIP -d /usr/local 'include/*'
 rm -f $PROTOC_ZIP
 
-make install-without-custom-kernels
+export BUILD_EXTENSIONS=True
+make install
+text-generation-launcher --model-id tjluyao/llama-3-8b --disable-flashinfer

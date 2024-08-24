@@ -6,7 +6,7 @@ install-flashinfer-kernel:
 	pip install flashinfer==0.1.1 -i https://flashinfer.ai/whl/cu121/torch2.3
 
 install-server:
-	cd server && make install
+	cd server && make install-flash-attention && make install
 
 install-custom-kernels:
 	if [ "$$BUILD_EXTENSIONS" = "True" ]; then cd server/custom_kernels && python setup.py install; else echo "Custom kernels are disabled, you need to set the BUILD_EXTENSIONS environment variable to 'True' in order to build them. (Please read the docs, kernels might not work on all hardware)"; fi
