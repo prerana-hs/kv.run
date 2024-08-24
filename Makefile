@@ -26,6 +26,8 @@ install-benchmark:
 
 install: install-server install-router install-launcher install-custom-kernels install-flashinfer-kernel install-punica-kernel
 
+install-without-custom-kernels: install-server install-router install-launcher
+
 server-dev:
 	cd server && make run-dev
 
